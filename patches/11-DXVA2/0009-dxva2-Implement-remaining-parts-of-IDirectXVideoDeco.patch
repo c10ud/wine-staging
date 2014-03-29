@@ -1,0 +1,395 @@
+From 1e6b2600e13005375d0feb19d45e82bd1d438552 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Michael=20M=C3=BCller?= <michael@fds-team.de>
+Date: Sat, 29 Mar 2014 06:33:56 +0100
+Subject: dxva2: Implement remaining parts of IDirectXVideoDecoderService
+ (except CreateVideoDecoder)
+
+---
+ dlls/dxva2/videoservices.c |  263 +++++++++++++++++++++++++++++++++++++++++---
+ include/dxva2api.idl       |    2 +
+ 2 files changed, 251 insertions(+), 14 deletions(-)
+
+diff --git a/dlls/dxva2/videoservices.c b/dlls/dxva2/videoservices.c
+index dd4c866..a80ec09 100644
+--- a/dlls/dxva2/videoservices.c
++++ b/dlls/dxva2/videoservices.c
+@@ -33,11 +33,19 @@
+ 
+ WINE_DEFAULT_DEBUG_CHANNEL(dxva2);
+ 
++static CRITICAL_SECTION dxva2_cs;
++static CRITICAL_SECTION_DEBUG dxva2_cs_debug =
++{
++    0, 0, &dxva2_cs,
++    {&dxva2_cs_debug.ProcessLocksList,
++    &dxva2_cs_debug.ProcessLocksList},
++    0, 0, {(DWORD_PTR)(__FILE__ ": dxva2")}
++};
++static CRITICAL_SECTION dxva2_cs = {&dxva2_cs_debug, -1, 0, 0, 0, 0};
+ 
+-BOOL va_initialized = FALSE;
+-Display *x11_display;
+-VADisplay va_display;
+-
++static BOOL va_initialized = FALSE;
++static Display *x11_display;
++static VADisplay va_display;
+ 
+ struct dxva2_profiles
+ {
+@@ -62,6 +70,54 @@ struct dxva2_profiles profile_table[] =
+     /* TODO: MPEG4, H264, ... */
+ };
+ 
++struct dxva2_formats
++{
++    const D3DFORMAT d3dformat;
++    const unsigned int vafourcc;
++    const unsigned int vaformat;
++    const BOOL fallback;
++};
++
++const struct dxva2_formats format_table[] =
++{
++    {MAKEFOURCC('N','V','1','1'), VA_FOURCC_NV11, VA_RT_FORMAT_YUV420, FALSE},
++    {MAKEFOURCC('N','V','1','2'), VA_FOURCC_NV12, VA_RT_FORMAT_YUV420, TRUE },
++    {MAKEFOURCC('A','I','4','4'), VA_FOURCC_AI44, 0,                   FALSE}, /* TODO */
++    {0,                           VA_FOURCC_RGBA, VA_RT_FORMAT_RGB32,  FALSE}, /* TODO */
++    {0,                           VA_FOURCC_RGBX, VA_RT_FORMAT_RGB32,  FALSE}, /* TODO */
++    {0,                           VA_FOURCC_BGRA, VA_RT_FORMAT_RGB32,  FALSE}, /* TODO */
++    {0,                           VA_FOURCC_BGRX, VA_RT_FORMAT_RGB32,  FALSE}, /* TODO */
++    {D3DFMT_A8R8G8B8,             VA_FOURCC_ARGB, VA_RT_FORMAT_RGB32,  FALSE},
++    {D3DFMT_X8R8G8B8,             VA_FOURCC_XRGB, VA_RT_FORMAT_RGB32,  FALSE},
++    {D3DFMT_UYVY,                 VA_FOURCC_UYVY, VA_RT_FORMAT_YUV422, FALSE},
++    {D3DFMT_YUY2,                 VA_FOURCC_YUY2, VA_RT_FORMAT_YUV422, FALSE},
++    {MAKEFOURCC('A','Y','U','V'), VA_FOURCC_AYUV, 0,                   FALSE},
++    {MAKEFOURCC('Y','V','1','2'), VA_FOURCC_YV12, 0,                   FALSE}, /* TODO */
++    {0,                           VA_FOURCC_P208, 0,                   FALSE}, /* TODO */
++    {MAKEFOURCC('I','Y','U','V'), VA_FOURCC_IYUV, VA_RT_FORMAT_YUV411, FALSE},
++    {MAKEFOURCC('Y','V','2','4'), VA_FOURCC_YV24, 0,                   FALSE}, /* TODO */
++    {0,                           VA_FOURCC_YV32, 0,                   FALSE}, /* TODO */
++    {0,                           VA_FOURCC_Y800, 0,                   FALSE}, /* TODO */
++    {MAKEFOURCC('I','M','C','3'), VA_FOURCC_IMC3, 0,                   FALSE},
++    {0,                           VA_FOURCC_411P, 0,                   FALSE}, /* TODO */
++    {0,                           VA_FOURCC_422H, 0,                   FALSE}, /* TODO */
++    {0,                           VA_FOURCC_422V, 0,                   FALSE}, /* TODO */
++    {0,                           VA_FOURCC_444P, 0,                   FALSE}, /* TODO */
++    {0,                           VA_FOURCC_RGBP, VA_RT_FORMAT_RGBP,   FALSE}, /* TODO */
++    {0,                           VA_FOURCC_BGRP, VA_RT_FORMAT_RGBP,   FALSE}, /* TODO */
++    {0,                           VA_FOURCC_411R, 0,                   FALSE}, /* TODO */
++};
++
++static void dxva2_mutex_lock( void )
++{
++    EnterCriticalSection(&dxva2_cs);
++}
++
++static void dxva2_mutex_unlock( void )
++{
++    LeaveCriticalSection(&dxva2_cs);
++}
++
+ static struct dxva2_profiles *dxva2_lookup_vaprofile( int profile, int entryPoint )
+ {
+     int i;
+@@ -73,6 +129,34 @@ static struct dxva2_profiles *dxva2_lookup_vaprofile( int profile, int entryPoin
+     return NULL;
+ }
+ 
++static struct dxva2_profiles *dxva2_lookup_guid( const GUID *guid )
++{
++    int i;
++    for (i = 0; i < sizeof(profile_table)/sizeof(profile_table[0]); i++)
++    {
++        if (IsEqualGUID(profile_table[i].guid, guid))
++            return &profile_table[i];
++    }
++    return NULL;
++}
++
++static BOOL is_h264_codec( REFGUID guid )
++{
++    if (IsEqualGUID(guid, &DXVA2_ModeH264_A))
++        return TRUE;
++    if (IsEqualGUID(guid, &DXVA2_ModeH264_B))
++        return TRUE;
++    if (IsEqualGUID(guid, &DXVA2_ModeH264_C))
++        return TRUE;
++    if (IsEqualGUID(guid, &DXVA2_ModeH264_D))
++        return TRUE;
++    if (IsEqualGUID(guid, &DXVA2_ModeH264_E))
++        return TRUE;
++    if (IsEqualGUID(guid, &DXVA2_ModeH264_F))
++        return TRUE;
++    return FALSE;
++}
++
+ static BOOL dxva2_enumerate_vaprofiles( void )
+ {
+     int numProfiles, numEntryPoints, i, j;
+@@ -85,11 +169,12 @@ static BOOL dxva2_enumerate_vaprofiles( void )
+ 
+     numProfiles    = vaMaxNumProfiles( va_display );
+     numEntryPoints = vaMaxNumEntrypoints( va_display );
++
+     if (!numProfiles || !numEntryPoints)
+         return FALSE;
+ 
+     profiles = HeapAlloc( GetProcessHeap(), 0, sizeof(VAProfile) * numProfiles );
+-    if (profiles)
++    if (!profiles)
+         return FALSE;
+ 
+     entryPoints = HeapAlloc( GetProcessHeap(), 0, sizeof(VAEntrypoint) * numEntryPoints );
+@@ -122,6 +207,49 @@ err:
+     return result;
+ }
+ 
++static BOOL dxva2_is_format_supported( const struct dxva2_profiles *profile, const struct dxva2_formats *format )
++{
++    VAConfigAttrib attrib;
++    VAConfigID config;
++    VAStatus status;
++    unsigned int numSurfaceAttribs = 0;
++    VASurfaceAttrib *surfaceAttribs;
++    BOOL result = FALSE;
++    int i;
++
++    attrib.type  = VAConfigAttribRTFormat;
++    attrib.value = format->vaformat;
++    if (vaCreateConfig( va_display, profile->profile, profile->entryPoint, &attrib, 1, &config ) != VA_STATUS_SUCCESS)
++        return FALSE;
++
++    status = vaQuerySurfaceAttributes( va_display, config, NULL, &numSurfaceAttribs );
++
++    if (status == VA_STATUS_ERROR_UNIMPLEMENTED || status == VA_STATUS_ERROR_INVALID_PARAMETER)
++        return format->fallback;
++    if (status != VA_STATUS_SUCCESS || numSurfaceAttribs == 0)
++        return FALSE;
++
++    surfaceAttribs = HeapAlloc( GetProcessHeap(), 0, sizeof(VASurfaceAttrib) * numSurfaceAttribs );
++    if (!surfaceAttribs)
++        return FALSE;
++
++    if (vaQuerySurfaceAttributes( va_display, config, surfaceAttribs, &numSurfaceAttribs ) != VA_STATUS_SUCCESS)
++        goto err;
++
++    for (i = 0; i < numSurfaceAttribs; i++)
++    {
++        if (surfaceAttribs[i].type == VASurfaceAttribPixelFormat && surfaceAttribs[i].value.value.i == format->vafourcc)
++        {
++            result = TRUE;
++            break;
++        }
++    }
++
++err:
++    HeapFree( GetProcessHeap(), 0, surfaceAttribs );
++    return result;
++}
++
+ typedef struct
+ {
+     IDirectXVideoAccelerationService IDirectXVideoAccelerationService_iface;
+@@ -129,6 +257,7 @@ typedef struct
+     IDirectXVideoProcessorService    IDirectXVideoProcessorService_iface;
+ 
+     LONG refCount;
++    IDirect3DDevice9 *device;
+ } DirectXVideoAccelerationServiceImpl;
+ 
+ static inline DirectXVideoAccelerationServiceImpl *impl_from_IDirectXVideoAccelerationService( IDirectXVideoAccelerationService *iface )
+@@ -196,6 +325,7 @@ static ULONG WINAPI DirectXVideoAccelerationService_Release( IDirectXVideoAccele
+     if (!refCount)
+     {
+         TRACE("Destroying\n");
++        IDirect3DDevice9_Release(This->device);
+         CoTaskMemFree(This);
+     }
+ 
+@@ -206,11 +336,27 @@ static HRESULT WINAPI DirectXVideoAccelerationService_CreateSurface( IDirectXVid
+         UINT backBuffers, D3DFORMAT format, D3DPOOL pool, DWORD usage, DWORD dxvaType, IDirect3DSurface9 **ppSurface, HANDLE *pSharedHandle )
+ {
+     DirectXVideoAccelerationServiceImpl *This = impl_from_IDirectXVideoAccelerationService(iface);
++    HRESULT hr = S_OK;
++    int i;
+ 
+-    FIXME("(%p)->(%u, %u, %u, %#x, 0x%x, 0x%x, 0x%x, %p, %p): stub\n",
+-        This, width, height, backBuffers, format, pool, usage, dxvaType, ppSurface, pSharedHandle);
++    FIXME("(%p)->(%u, %u, %u, %#x, 0x%x, 0x%x, 0x%x, %p, %p): semi-stub\n",
++        This, width, height, backBuffers, format, pool, usage, dxvaType, ppSurface, pSharedHandle );
+ 
+-    return E_NOTIMPL;
++    hr = IDirect3DDevice9_CreateRenderTarget( This->device, width, height, format, D3DMULTISAMPLE_NONE, 0, TRUE, &ppSurface[0], pSharedHandle );
++    if (FAILED(hr)) return hr;
++
++    for (i = 0; i < backBuffers; i++)
++    {
++        hr = IDirect3DDevice9_CreateOffscreenPlainSurface( This->device, width, height, format, pool, &ppSurface[i + 1], pSharedHandle );
++        if (FAILED(hr)) goto err;
++    }
++
++    return S_OK;
++
++err:
++    while (i-- >= 0)
++        IDirect3DSurface9_Release( ppSurface[i] );
++    return hr;
+ }
+ 
+ static const IDirectXVideoAccelerationServiceVtbl DirectXVideoAccelerationService_VTable =
+@@ -277,11 +423,43 @@ static HRESULT WINAPI DirectXVideoDecoderService_GetDecoderConfigurations( IDire
+         const DXVA2_VideoDesc *pVideoDesc, IUnknown *pReserved, UINT *pCount, DXVA2_ConfigPictureDecode **ppConfigs )
+ {
+     DirectXVideoAccelerationServiceImpl *This = impl_from_IDirectXVideoDecoderService(iface);
++    DXVA2_ConfigPictureDecode *config;
+ 
+-    FIXME("(%p/%p)->(%s, %p, %p, %p, %p): stub\n",
++    FIXME("(%p/%p)->(%s, %p, %p, %p, %p): semi-stub\n",
+         iface, This, debugstr_guid(guid), pVideoDesc, pReserved, pCount, ppConfigs);
+ 
+-    return E_NOTIMPL;
++    if (!guid || !pVideoDesc || !pCount || !ppConfigs)
++        return E_INVALIDARG;
++
++    config = CoTaskMemAlloc(sizeof(*config));
++    if (!config)
++        return E_OUTOFMEMORY;
++
++    /* TODO: Query libva instead of using hardcoded values */
++
++    memcpy(&config->guidConfigBitstreamEncryption, &DXVA_NoEncrypt, sizeof(GUID));
++    memcpy(&config->guidConfigMBcontrolEncryption, &DXVA_NoEncrypt, sizeof(GUID));
++    memcpy(&config->guidConfigResidDiffEncryption, &DXVA_NoEncrypt, sizeof(GUID));
++
++    config->ConfigBitstreamRaw             = is_h264_codec(guid) ? 1 : 0;
++    config->ConfigMBcontrolRasterOrder     = is_h264_codec(guid) ? 0 : 1;
++    config->ConfigResidDiffHost            = 0;
++    config->ConfigSpatialResid8            = 0;
++    config->ConfigResid8Subtraction        = 0;
++    config->ConfigSpatialHost8or9Clipping  = 0;
++    config->ConfigSpatialResidInterleaved  = 0;
++    config->ConfigIntraResidUnsigned       = 0;
++    config->ConfigResidDiffAccelerator     = 1;
++    config->ConfigHostInverseScan          = 1;
++    config->ConfigSpecificIDCT             = 0;
++    config->Config4GroupedCoefs            = 0;
++    config->ConfigMinRenderTargetBuffCount = 1;
++    config->ConfigDecoderSpecific          = 0;
++
++    *pCount    = 1;
++    *ppConfigs = config;
++
++    return S_OK;
+ }
+ 
+ static HRESULT WINAPI DirectXVideoDecoderService_GetDecoderDeviceGuids( IDirectXVideoDecoderService *iface, UINT *count, GUID **pGuids )
+@@ -323,10 +501,64 @@ static HRESULT WINAPI DirectXVideoDecoderService_GetDecoderRenderTargets( IDirec
+                                                                           UINT *pCount, D3DFORMAT **pFormats )
+ {
+     DirectXVideoAccelerationServiceImpl *This = impl_from_IDirectXVideoDecoderService(iface);
++    struct dxva2_profiles *profile;
++    VAConfigAttrib attrib;
++    D3DFORMAT *formats;
++    int numFormats = 0, i;
+ 
+-    FIXME("(%p/%p)->(%s, %p, %p): stub\n", iface, This, debugstr_guid(guid), pCount, pFormats);
++    FIXME("(%p/%p)->(%s, %p, %p): semi-stub\n", iface, This, debugstr_guid(guid), pCount, pFormats);
+ 
+-    return E_NOTIMPL;
++    if (!guid || !pCount || !pFormats)
++        return E_INVALIDARG;
++
++    if (!va_initialized)
++        return E_FAIL;
++
++    profile = dxva2_lookup_guid( guid );
++    if (!profile)
++        return E_INVALIDARG;
++
++    if (!profile->supported)
++        return E_FAIL;
++
++    formats = CoTaskMemAlloc( sizeof(D3DFORMAT) * (sizeof(format_table)/sizeof(format_table[0])) );
++    if (!formats)
++        return E_OUTOFMEMORY;
++
++    dxva2_mutex_lock();
++
++    attrib.type  = VAConfigAttribRTFormat;
++    attrib.value = 0;
++    if (vaGetConfigAttributes( va_display, profile->profile, profile->entryPoint, &attrib, 1 ) != VA_STATUS_SUCCESS)
++        goto err;
++
++    for (i = 0; i < sizeof(format_table)/sizeof(format_table[0]); i++)
++    {
++        /* skip TODOs */
++        if (!format_table[i].d3dformat || !format_table[i].vafourcc || !format_table[i].vaformat)
++            continue;
++
++        /* check if the main format is supported (i.e. RGB, YUV420, ...) */
++        if (!(attrib.value & format_table[i].vaformat))
++            continue;
++
++        if (dxva2_is_format_supported( profile, &format_table[i] ))
++            formats[numFormats++] = format_table[i].d3dformat;
++    }
++
++    if (!numFormats)
++        goto err;
++
++    *pCount   = numFormats;
++    *pFormats = formats;
++
++    dxva2_mutex_unlock();
++    return S_OK;
++
++err:
++    CoTaskMemFree( formats );
++    dxva2_mutex_unlock();
++    return E_FAIL;
+ }
+ 
+ static const IDirectXVideoDecoderServiceVtbl DirectXVideoDecoderService_VTable =
+@@ -517,7 +749,7 @@ HRESULT videoservice_create( IDirect3DDevice9 *device, REFIID riid, void **ppv )
+     DirectXVideoAccelerationServiceImpl *videoservice;
+     HRESULT hr;
+ 
+-    if (!riid || !ppv)
++    if (!device || !riid || !ppv)
+         return E_INVALIDARG;
+ 
+     videoservice = CoTaskMemAlloc(sizeof(DirectXVideoAccelerationServiceImpl));
+@@ -528,12 +760,15 @@ HRESULT videoservice_create( IDirect3DDevice9 *device, REFIID riid, void **ppv )
+     videoservice->IDirectXVideoDecoderService_iface.lpVtbl      = &DirectXVideoDecoderService_VTable;
+     videoservice->IDirectXVideoProcessorService_iface.lpVtbl    = &DirectXVideoProcessorService_VTable;
+     videoservice->refCount = 0;
++    videoservice->device = device;
+ 
+     /* will increase refCount if a matching object is found */
+     hr = DirectXVideoAccelerationService_QueryInterface(&videoservice->IDirectXVideoAccelerationService_iface, riid, ppv);
+ 
+-    if (hr != S_OK)
++    if (FAILED(hr))
+         CoTaskMemFree(videoservice);
++    else
++        IDirect3DDevice9_AddRef(device);
+ 
+     return hr;
+ }
+diff --git a/include/dxva2api.idl b/include/dxva2api.idl
+index c11f90d..57c5d5a 100644
+--- a/include/dxva2api.idl
++++ b/include/dxva2api.idl
+@@ -46,6 +46,8 @@ cpp_quote("DEFINE_GUID(DXVA2_ModeVC1_B,        0x1b81beA1, 0xa0c7,0x11d3, 0xb9,0
+ cpp_quote("DEFINE_GUID(DXVA2_ModeVC1_C,        0x1b81beA2, 0xa0c7,0x11d3, 0xb9,0x84,0x00,0xc0,0x4f,0x2e,0x73,0xc5);")
+ cpp_quote("DEFINE_GUID(DXVA2_ModeVC1_D,        0x1b81beA3, 0xa0c7,0x11d3, 0xb9,0x84,0x00,0xc0,0x4f,0x2e,0x73,0xc5);")
+ 
++cpp_quote("DEFINE_GUID(DXVA_NoEncrypt,         0x1b81bed0, 0xa0c7,0x11d3, 0xb9,0x84,0x00,0xc0,0x4f,0x2e,0x73,0xc5);")
++
+ /* alternate names */
+ cpp_quote("#define DXVA2_ModeMPEG2_MOCOMP      DXVA2_ModeMPEG2_MoComp")
+ 
+-- 
+1.7.9.5
+

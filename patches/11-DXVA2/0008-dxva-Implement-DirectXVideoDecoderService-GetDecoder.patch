@@ -1,0 +1,229 @@
+From 97ddb46e19bbe9d3d9834661de30a8e8ba7ddb74 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Michael=20M=C3=BCller?= <michael@fds-team.de>
+Date: Sat, 29 Mar 2014 04:28:11 +0100
+Subject: dxva: Implement DirectXVideoDecoderService::GetDecoderDeviceGuids
+
+---
+ dlls/dxva2/Makefile.in     |    1 +
+ dlls/dxva2/dxva2_private.h |    1 +
+ dlls/dxva2/main.c          |    1 +
+ dlls/dxva2/videoservices.c |  151 +++++++++++++++++++++++++++++++++++++++++++-
+ 4 files changed, 152 insertions(+), 2 deletions(-)
+
+diff --git a/dlls/dxva2/Makefile.in b/dlls/dxva2/Makefile.in
+index 02c9758..7ee5b1c 100644
+--- a/dlls/dxva2/Makefile.in
++++ b/dlls/dxva2/Makefile.in
+@@ -1,5 +1,6 @@
+ MODULE = dxva2.dll
+ IMPORTS = ole32
++EXTRALIBS = -lX11 -lva -lva-x11
+ 
+ C_SRCS = \
+ 	main.c \
+diff --git a/dlls/dxva2/dxva2_private.h b/dlls/dxva2/dxva2_private.h
+index 4b0f490..ff0de54 100644
+--- a/dlls/dxva2/dxva2_private.h
++++ b/dlls/dxva2/dxva2_private.h
+@@ -1,4 +1,5 @@
+ #include "dxva2api.h"
+ 
++BOOL    videoservice_init( void );
+ HRESULT videoservice_create( IDirect3DDevice9 *device, REFIID riid, void **ppv );
+ HRESULT devicemanager_create( UINT *resetToken, void **ppv );
+\ No newline at end of file
+diff --git a/dlls/dxva2/main.c b/dlls/dxva2/main.c
+index 4c0c860..cf73c83 100644
+--- a/dlls/dxva2/main.c
++++ b/dlls/dxva2/main.c
+@@ -331,6 +331,7 @@ BOOL WINAPI DllMain (HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
+             return FALSE;  /* prefer native version */
+         case DLL_PROCESS_ATTACH:
+             DisableThreadLibraryCalls(hinstDLL);
++            videoservice_init();
+             break;
+     }
+ 
+diff --git a/dlls/dxva2/videoservices.c b/dlls/dxva2/videoservices.c
+index faa6889..dd4c866 100644
+--- a/dlls/dxva2/videoservices.c
++++ b/dlls/dxva2/videoservices.c
+@@ -29,8 +29,99 @@
+ #include "LowLevelMonitorConfigurationAPI.h"
+ #include "HighLevelMonitorConfigurationAPI.h"
+ 
++#include <va/va_x11.h>
++
+ WINE_DEFAULT_DEBUG_CHANNEL(dxva2);
+ 
++
++BOOL va_initialized = FALSE;
++Display *x11_display;
++VADisplay va_display;
++
++
++struct dxva2_profiles
++{
++    const int profile;
++    const int entryPoint;
++    const GUID* guid;
++    BOOL supported;
++};
++
++struct dxva2_profiles profile_table[] =
++{
++    /* MPEG2 */
++    {VAProfileMPEG2Main,            VAEntrypointVLD,    &DXVA2_ModeMPEG2_VLD},
++    {VAProfileMPEG2Main,            VAEntrypointMoComp, &DXVA2_ModeMPEG2_MoComp},
++    {VAProfileMPEG2Main,            VAEntrypointIDCT,   &DXVA2_ModeMPEG2_IDCT},
++
++    /* VC1 */
++    {VAProfileVC1Advanced,          VAEntrypointVLD,    &DXVA2_ModeVC1_VLD},
++    {VAProfileVC1Advanced,          VAEntrypointIDCT,   &DXVA2_ModeVC1_IDCT},
++    {VAProfileVC1Advanced,          VAEntrypointMoComp, &DXVA2_ModeVC1_MoComp},
++
++    /* TODO: MPEG4, H264, ... */
++};
++
++static struct dxva2_profiles *dxva2_lookup_vaprofile( int profile, int entryPoint )
++{
++    int i;
++    for (i = 0; i < sizeof(profile_table)/sizeof(profile_table[0]); i++)
++    {
++        if (profile_table[i].profile == profile && profile_table[i].entryPoint == entryPoint)
++            return &profile_table[i];
++    }
++    return NULL;
++}
++
++static BOOL dxva2_enumerate_vaprofiles( void )
++{
++    int numProfiles, numEntryPoints, i, j;
++    VAProfile    *profiles    = NULL;
++    VAEntrypoint *entryPoints = NULL;
++    BOOL result = FALSE;
++
++    for (i = 0; i < sizeof(profile_table)/sizeof(profile_table[0]); i++)
++        profile_table[i].supported = FALSE;
++
++    numProfiles    = vaMaxNumProfiles( va_display );
++    numEntryPoints = vaMaxNumEntrypoints( va_display );
++    if (!numProfiles || !numEntryPoints)
++        return FALSE;
++
++    profiles = HeapAlloc( GetProcessHeap(), 0, sizeof(VAProfile) * numProfiles );
++    if (profiles)
++        return FALSE;
++
++    entryPoints = HeapAlloc( GetProcessHeap(), 0, sizeof(VAEntrypoint) * numEntryPoints );
++    if (!entryPoints)
++        goto err;
++
++    if (vaQueryConfigProfiles( va_display, profiles, &numProfiles ) != VA_STATUS_SUCCESS)
++        goto err;
++
++    for (i = 0; i < numProfiles; i++)
++    {
++        if (vaQueryConfigEntrypoints( va_display, profiles[i], entryPoints, &numEntryPoints ) != VA_STATUS_SUCCESS)
++            continue;
++
++        for (j = 0; j < numEntryPoints; j++)
++        {
++            struct dxva2_profiles *profile = dxva2_lookup_vaprofile( profiles[i], entryPoints[j] );
++            if (profile)
++                profile->supported = TRUE;
++            else
++                WARN("missing decoder translation for format %d/%d\n", profiles[i], entryPoints[i]);
++        }
++    }
++
++    result = TRUE;
++
++err:
++    HeapFree( GetProcessHeap(), 0, profiles );
++    HeapFree( GetProcessHeap(), 0, entryPoints );
++    return result;
++}
++
+ typedef struct
+ {
+     IDirectXVideoAccelerationService IDirectXVideoAccelerationService_iface;
+@@ -196,10 +287,36 @@ static HRESULT WINAPI DirectXVideoDecoderService_GetDecoderConfigurations( IDire
+ static HRESULT WINAPI DirectXVideoDecoderService_GetDecoderDeviceGuids( IDirectXVideoDecoderService *iface, UINT *count, GUID **pGuids )
+ {
+     DirectXVideoAccelerationServiceImpl *This = impl_from_IDirectXVideoDecoderService(iface);
++    GUID *guids;
++    int numProfiles = 0, i, j;
+ 
+-    FIXME("(%p/%p)->(%p, %p): stub\n", iface, This, count, pGuids);
++    FIXME("(%p/%p)->(%p, %p): semi-stub\n", iface, This, count, pGuids);
+ 
+-    return E_NOTIMPL;
++    if (!count || !pGuids)
++        return E_INVALIDARG;
++
++    if (!va_initialized)
++        return E_FAIL;
++
++    /* determine number of supported codecs */
++    for (i = 0; i < sizeof(profile_table)/sizeof(profile_table[0]); i++)
++        if (profile_table[i].supported) numProfiles++;
++
++    if (!numProfiles)
++        return D3DERR_INVALIDCALL;
++
++    guids = CoTaskMemAlloc(sizeof(GUID) * numProfiles);
++    if (!guids)
++        return E_FAIL;
++
++    /* return allocated memory and number of elements */
++    *count  = numProfiles;
++    *pGuids = guids;
++
++    for (i = 0, j = 0; i < sizeof(profile_table)/sizeof(profile_table[0]) && j < numProfiles; i++)
++        if (profile_table[i].supported) memcpy(&guids[j++], profile_table[i].guid, sizeof(GUID));
++
++    return S_OK;
+ }
+ 
+ static HRESULT WINAPI DirectXVideoDecoderService_GetDecoderRenderTargets( IDirectXVideoDecoderService *iface, REFGUID guid,
+@@ -364,6 +481,36 @@ static const IDirectXVideoProcessorServiceVtbl DirectXVideoProcessorService_VTab
+     DirectXVideoProcessorService_CreateVideoProcessor
+ };
+ 
++BOOL videoservice_init( void )
++{
++    int major, minor;
++
++    if (va_initialized)
++        return TRUE;
++
++    if (!(x11_display = XOpenDisplay( NULL )))
++        return FALSE;
++
++    if (!(va_display = vaGetDisplay( x11_display )))
++    {
++        XCloseDisplay( x11_display );
++        return FALSE;
++    }
++
++    if (vaInitialize( va_display, &major, &minor ) != VA_STATUS_SUCCESS)
++        goto err;
++
++    if (!dxva2_enumerate_vaprofiles())
++        goto err;
++
++    va_initialized = TRUE;
++    return TRUE;
++
++err:
++    vaTerminate( va_display );
++    XCloseDisplay( x11_display );
++    return FALSE;
++}
+ 
+ HRESULT videoservice_create( IDirect3DDevice9 *device, REFIID riid, void **ppv )
+ {
+-- 
+1.7.9.5
+

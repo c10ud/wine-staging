@@ -1,0 +1,255 @@
+From d01e4a4bc14a4aac216395191411b112d9fd5ead Mon Sep 17 00:00:00 2001
+From: Sebastian Lackner <sebastian@fds-team.de>
+Date: Sat, 29 Mar 2014 02:45:04 +0100
+Subject: dxva2: Implement stubs for IDirect3DDeviceManager9 interface
+
+---
+ dlls/dxva2/Makefile.in     |    3 +-
+ dlls/dxva2/devicemanager.c |  193 ++++++++++++++++++++++++++++++++++++++++++++
+ dlls/dxva2/dxva2_private.h |    3 +-
+ dlls/dxva2/main.c          |    4 +-
+ 4 files changed, 199 insertions(+), 4 deletions(-)
+ create mode 100644 dlls/dxva2/devicemanager.c
+
+diff --git a/dlls/dxva2/Makefile.in b/dlls/dxva2/Makefile.in
+index 4b4d24f..02c9758 100644
+--- a/dlls/dxva2/Makefile.in
++++ b/dlls/dxva2/Makefile.in
+@@ -3,4 +3,5 @@ IMPORTS = ole32
+ 
+ C_SRCS = \
+ 	main.c \
+-	videoservices.c
++	videoservices.c \
++	devicemanager.c
+diff --git a/dlls/dxva2/devicemanager.c b/dlls/dxva2/devicemanager.c
+new file mode 100644
+index 0000000..26ad45d
+--- /dev/null
++++ b/dlls/dxva2/devicemanager.c
+@@ -0,0 +1,193 @@
++/*
++ * Copyright 2014 Sebastian Lackner for Pipelight
++ *
++ * This library is free software; you can redistribute it and/or
++ * modify it under the terms of the GNU Lesser General Public
++ * License as published by the Free Software Foundation; either
++ * version 2.1 of the License, or (at your option) any later version.
++ *
++ * This library is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++ * Lesser General Public License for more details.
++ *
++ * You should have received a copy of the GNU Lesser General Public
++ * License along with this library; if not, write to the Free Software
++ * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
++ */
++
++#include <stdarg.h>
++#include "windef.h"
++#include "winbase.h"
++
++#include "wine/debug.h"
++
++#define COBJMACROS
++#include "dxva2api.h"
++#include "dxva2_private.h"
++#include "PhysicalMonitorEnumerationAPI.h"
++#include "LowLevelMonitorConfigurationAPI.h"
++#include "HighLevelMonitorConfigurationAPI.h"
++
++WINE_DEFAULT_DEBUG_CHANNEL(dxva2);
++
++typedef struct
++{
++    IDirect3DDeviceManager9 IDirect3DDeviceManager9_iface;
++    LONG refCount;
++} Direct3DDeviceManager9Impl;
++
++static inline Direct3DDeviceManager9Impl *impl_from_Direct3DDeviceManager9( IDirect3DDeviceManager9 *iface )
++{
++    return CONTAINING_RECORD(iface, Direct3DDeviceManager9Impl, IDirect3DDeviceManager9_iface);
++}
++
++/*****************************************************************************
++ * IDirect3DDeviceManager9  interface
++ */
++
++static HRESULT WINAPI Direct3DDeviceManager9_QueryInterface( IDirect3DDeviceManager9 *iface, REFIID riid, LPVOID *ppv )
++{
++    Direct3DDeviceManager9Impl *This = impl_from_Direct3DDeviceManager9(iface);
++    TRACE("(%p/%p)->(%s, %p)\n", iface, This, debugstr_guid(riid), ppv);
++
++    *ppv = NULL;
++
++    if (IsEqualIID(riid, &IID_IUnknown) || IsEqualIID(riid, &IID_IDirect3DDeviceManager9))
++        *ppv = &This->IDirect3DDeviceManager9_iface;
++
++    if (*ppv)
++    {
++        IUnknown_AddRef((IUnknown *)(*ppv));
++        return S_OK;
++    }
++
++    FIXME("No interface for %s\n", debugstr_guid(riid));
++    return E_NOINTERFACE;
++}
++
++static ULONG WINAPI Direct3DDeviceManager9_AddRef( IDirect3DDeviceManager9 *iface )
++{
++    Direct3DDeviceManager9Impl *This = impl_from_Direct3DDeviceManager9(iface);
++    ULONG refCount = InterlockedIncrement(&This->refCount);
++
++    TRACE("(%p)->() AddRef from %d\n", This, refCount - 1);
++
++    return refCount;
++}
++
++static ULONG WINAPI Direct3DDeviceManager9_Release( IDirect3DDeviceManager9 *iface )
++{
++    Direct3DDeviceManager9Impl *This = impl_from_Direct3DDeviceManager9(iface);
++    ULONG refCount = InterlockedDecrement(&This->refCount);
++
++    TRACE("(%p)->() Release from %d\n", This, refCount + 1);
++
++    if (!refCount)
++    {
++        TRACE("Destroying\n");
++        CoTaskMemFree(This);
++    }
++
++    return refCount;
++}
++
++static HRESULT WINAPI Direct3DDeviceManager9_ResetDevice( IDirect3DDeviceManager9 *iface, IDirect3DDevice9 *pDevice, UINT resetToken )
++{
++    Direct3DDeviceManager9Impl *This = impl_from_Direct3DDeviceManager9(iface);
++
++    FIXME("(%p)->(%p, %u): stub\n", This, pDevice, resetToken);
++
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI Direct3DDeviceManager9_OpenDeviceHandle( IDirect3DDeviceManager9 *iface, HANDLE *phDevice )
++{
++    Direct3DDeviceManager9Impl *This = impl_from_Direct3DDeviceManager9(iface);
++
++    FIXME("(%p)->(%p): stub\n", This, phDevice);
++
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI Direct3DDeviceManager9_CloseDeviceHandle( IDirect3DDeviceManager9 *iface, HANDLE hDevice )
++{
++    Direct3DDeviceManager9Impl *This = impl_from_Direct3DDeviceManager9(iface);
++
++    FIXME("(%p)->(%p): stub\n", This, hDevice);
++
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI Direct3DDeviceManager9_TestDevice( IDirect3DDeviceManager9 *iface, HANDLE hDevice )
++{
++    Direct3DDeviceManager9Impl *This = impl_from_Direct3DDeviceManager9(iface);
++
++    FIXME("(%p)->(%p): stub\n", This, hDevice);
++
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI Direct3DDeviceManager9_LockDevice( IDirect3DDeviceManager9 *iface, HANDLE hDevice, IDirect3DDevice9 **ppDevice, BOOL fBlock )
++{
++    Direct3DDeviceManager9Impl *This = impl_from_Direct3DDeviceManager9(iface);
++
++    FIXME("(%p)->(%p, %p, %d): stub\n", This, hDevice, ppDevice, fBlock);
++
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI Direct3DDeviceManager9_UnlockDevice( IDirect3DDeviceManager9 *iface, HANDLE hDevice, BOOL fSaveState )
++{
++    Direct3DDeviceManager9Impl *This = impl_from_Direct3DDeviceManager9(iface);
++
++    FIXME("(%p)->(%p, %d): stub\n", This, hDevice, fSaveState);
++
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI Direct3DDeviceManager9_GetVideoService( IDirect3DDeviceManager9 *iface, HANDLE hDevice, REFIID riid, void **ppService )
++{
++    Direct3DDeviceManager9Impl *This = impl_from_Direct3DDeviceManager9(iface);
++
++    FIXME("(%p)->(%p, %p, %p): stub\n", This, hDevice, riid, ppService);
++
++    return E_NOTIMPL;
++}
++
++static const IDirect3DDeviceManager9Vtbl Direct3DDeviceManager9_VTable =
++{
++    Direct3DDeviceManager9_QueryInterface,
++    Direct3DDeviceManager9_AddRef,
++    Direct3DDeviceManager9_Release,
++    Direct3DDeviceManager9_ResetDevice,
++    Direct3DDeviceManager9_OpenDeviceHandle,
++    Direct3DDeviceManager9_CloseDeviceHandle,
++    Direct3DDeviceManager9_TestDevice,
++    Direct3DDeviceManager9_LockDevice,
++    Direct3DDeviceManager9_UnlockDevice,
++    Direct3DDeviceManager9_GetVideoService
++};
++
++HRESULT devicemanager_create( UINT *resetToken, void **ppv )
++{
++    Direct3DDeviceManager9Impl *devicemanager;
++
++    if (!resetToken || !ppv)
++        return E_INVALIDARG;
++
++    *ppv = NULL;
++
++    devicemanager = CoTaskMemAlloc(sizeof(Direct3DDeviceManager9Impl));
++    if (!devicemanager)
++        return E_OUTOFMEMORY;
++
++    devicemanager->IDirect3DDeviceManager9_iface.lpVtbl = &Direct3DDeviceManager9_VTable;
++    devicemanager->refCount = 1;
++    *ppv = devicemanager;
++
++    /* FIXME; provide some better value? */
++    *resetToken = 0xdeadbeef;
++
++    return S_OK;
++}
+\ No newline at end of file
+diff --git a/dlls/dxva2/dxva2_private.h b/dlls/dxva2/dxva2_private.h
+index 3910598..4b0f490 100644
+--- a/dlls/dxva2/dxva2_private.h
++++ b/dlls/dxva2/dxva2_private.h
+@@ -1,3 +1,4 @@
+ #include "dxva2api.h"
+ 
+-HRESULT videoservice_create( IDirect3DDevice9 *device, REFIID riid, void **ppv );
+\ No newline at end of file
++HRESULT videoservice_create( IDirect3DDevice9 *device, REFIID riid, void **ppv );
++HRESULT devicemanager_create( UINT *resetToken, void **ppv );
+\ No newline at end of file
+diff --git a/dlls/dxva2/main.c b/dlls/dxva2/main.c
+index a65e480..4c0c860 100644
+--- a/dlls/dxva2/main.c
++++ b/dlls/dxva2/main.c
+@@ -41,9 +41,9 @@ BOOL WINAPI CapabilitiesRequestAndCapabilitiesReply( HMONITOR monitor, LPSTR buf
+ 
+ HRESULT WINAPI DXVA2CreateDirect3DDeviceManager9( UINT *resetToken, IDirect3DDeviceManager9 **dxvManager )
+ {
+-    FIXME("(%p, %p): stub\n", resetToken, dxvManager);
++    TRACE("(%p, %p)\n", resetToken, dxvManager);
+ 
+-    return E_NOTIMPL;
++    return devicemanager_create( resetToken, (void **)dxvManager );
+ }
+ 
+ HRESULT WINAPI DXVA2CreateVideoService( IDirect3DDevice9 *device, REFIID riid, void **ppv )
+-- 
+1.7.9.5
+
