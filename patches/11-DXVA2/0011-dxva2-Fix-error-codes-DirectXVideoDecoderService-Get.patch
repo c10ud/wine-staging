@@ -1,0 +1,62 @@
+From c65de294ae9ace6ed20956081f189fe039e9a9c6 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Michael=20M=C3=BCller?= <michael@fds-team.de>
+Date: Sat, 29 Mar 2014 17:45:17 +0100
+Subject: dxva2: Fix error codes
+ DirectXVideoDecoderService::GetDecoderDeviceGuids and simplify code
+
+---
+ dlls/dxva2/videoservices.c |   23 ++++++++++++-----------
+ 1 file changed, 12 insertions(+), 11 deletions(-)
+
+diff --git a/dlls/dxva2/videoservices.c b/dlls/dxva2/videoservices.c
+index 23c24fb..ce6188f 100644
+--- a/dlls/dxva2/videoservices.c
++++ b/dlls/dxva2/videoservices.c
+@@ -454,7 +454,7 @@ static HRESULT WINAPI DirectXVideoDecoderService_GetDecoderDeviceGuids( IDirectX
+ {
+     DirectXVideoAccelerationServiceImpl *This = impl_from_IDirectXVideoDecoderService(iface);
+     GUID *guids;
+-    int numProfiles = 0, i, j;
++    int numProfiles = 0, i;
+ 
+     FIXME("(%p/%p)->(%p, %p): semi-stub\n", iface, This, count, pGuids);
+ 
+@@ -464,24 +464,25 @@ static HRESULT WINAPI DirectXVideoDecoderService_GetDecoderDeviceGuids( IDirectX
+     if (!va_initialized)
+         return E_FAIL;
+ 
+-    /* determine number of supported codecs */
++    guids = CoTaskMemAlloc( sizeof(GUID) * (sizeof(profile_table)/sizeof(profile_table[0])) );
++    if (!guids)
++        return E_OUTOFMEMORY;
++
+     for (i = 0; i < sizeof(profile_table)/sizeof(profile_table[0]); i++)
+-        if (profile_table[i].supported) numProfiles++;
++    {
++        if (profile_table[i].supported)
++            memcpy(&guids[numProfiles++], profile_table[i].guid, sizeof(GUID));
++    }
+ 
+     if (!numProfiles)
+-        return D3DERR_INVALIDCALL;
+-
+-    guids = CoTaskMemAlloc(sizeof(GUID) * numProfiles);
+-    if (!guids)
++    {
++        CoTaskMemFree( guids );
+         return E_FAIL;
++    }
+ 
+-    /* return allocated memory and number of elements */
+     *count  = numProfiles;
+     *pGuids = guids;
+ 
+-    for (i = 0, j = 0; i < sizeof(profile_table)/sizeof(profile_table[0]) && j < numProfiles; i++)
+-        if (profile_table[i].supported) memcpy(&guids[j++], profile_table[i].guid, sizeof(GUID));
+-
+     return S_OK;
+ }
+ 
+-- 
+1.7.9.5
+
