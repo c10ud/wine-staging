@@ -1,0 +1,365 @@
+From b330554b86d7109f48aaaa2622ccccdc85385d99 Mon Sep 17 00:00:00 2001
+From: Sebastian Lackner <sebastian@fds-team.de>
+Date: Mon, 31 Mar 2014 13:09:43 +0200
+Subject: dxva2: Render vaapi surface to image and copy afterwards to the d3d9
+ surface
+
+---
+ dlls/dxva2/mpeg2decoder.c | 148 ++++++++++++++++++++++++++++++++++++----------
+ 1 file changed, 118 insertions(+), 30 deletions(-)
+
+diff --git a/dlls/dxva2/mpeg2decoder.c b/dlls/dxva2/mpeg2decoder.c
+index 0e68e70..0509ba6 100644
+--- a/dlls/dxva2/mpeg2decoder.c
++++ b/dlls/dxva2/mpeg2decoder.c
+@@ -19,6 +19,7 @@
+ #include <va/va_x11.h>
+ #undef Status
+ #include <stdarg.h>
++#include <assert.h>
+ #include "windef.h"
+ #include "winbase.h"
+ 
+@@ -32,8 +33,6 @@
+ #include "LowLevelMonitorConfigurationAPI.h"
+ #include "HighLevelMonitorConfigurationAPI.h"
+ 
+-#include <stdio.h> /* REMOVE THIS, ONLY DEBUGGING */
+-
+ #define SLICE_MAX_START_CODE 0x000001af
+ #define SLICE_MIN_START_CODE 0x00000101
+ 
+@@ -54,7 +53,7 @@ static inline int estimate_maximum_slice_size( int width, int height )
+ struct surface_map_entry
+ {
+     IDirect3DSurface9 *d3dSurface;
+-    VASurfaceID vaapiSurface;
++    VASurfaceID vaSurface;
+ };
+ 
+ typedef struct
+@@ -68,11 +67,12 @@ typedef struct
+     int width;
+     int height;
+     int maxSliceSize;
++    VAImage vaImage;
+ 
+     /* surfaces used by this decoder */
+     UINT surfaceCount;
+     struct surface_map_entry *surfaceMap;
+-    VASurfaceID currentSurface;
++    struct surface_map_entry *current;
+ 
+     /* configuration and context of the decoder */
+     VAConfigID config;
+@@ -131,7 +131,7 @@ static BOOL process_picture_parameters( DirectXVideoDecoderMPEG2Impl *This, DXVA
+         return FALSE;
+     }
+ 
+-    status = vaMapBuffer(va_display, vaPictureParam, (void **)&params);
++    status = vaMapBuffer( va_display, vaPictureParam, (void **)&params );
+     if (status != VA_STATUS_SUCCESS)
+     {
+         ERR("failed to map picture parameter buffer: %s (0x%x)\n", vaErrorStr(status), status);
+@@ -144,10 +144,10 @@ static BOOL process_picture_parameters( DirectXVideoDecoderMPEG2Impl *This, DXVA
+     params->vertical_size = This->height;
+ 
+     params->forward_reference_picture = (This->d3dPictureParam.wForwardRefPictureIndex != 0xFFFF) ?
+-        This->surfaceMap[This->d3dPictureParam.wForwardRefPictureIndex].vaapiSurface : VA_INVALID_ID;
++        This->surfaceMap[This->d3dPictureParam.wForwardRefPictureIndex].vaSurface : VA_INVALID_ID;
+ 
+     params->backward_reference_picture = (This->d3dPictureParam.wBackwardRefPictureIndex != 0xFFFF) ?
+-        This->surfaceMap[This->d3dPictureParam.wBackwardRefPictureIndex].vaapiSurface : VA_INVALID_ID;
++        This->surfaceMap[This->d3dPictureParam.wBackwardRefPictureIndex].vaSurface : VA_INVALID_ID;
+ 
+     /*
+      *  picture_coding_type can have the following values :
+@@ -223,7 +223,7 @@ static BOOL process_quantization_matrix( DirectXVideoDecoderMPEG2Impl *This, con
+         return FALSE;
+     }
+ 
+-    status = vaMapBuffer(va_display, vaIQMatrix, (void **)&matrix);
++    status = vaMapBuffer( va_display, vaIQMatrix, (void **)&matrix );
+     if (status != VA_STATUS_SUCCESS)
+     {
+         ERR("failed to map quantization matrix buffer: %s (0x%x)\n", vaErrorStr(status), status);
+@@ -421,7 +421,7 @@ static ULONG WINAPI DirectXVideoDecoderMPEG2_Release( IDirectXVideoDecoder *ifac
+ 
+         if (This->mapCountPictureParam || This->mapCountIQMatrix || This->mapCountSliceInfo || This->mapCountSlice)
+             WARN("decoder destroyed while buffer is mapped\n");
+-        else if (This->currentSurface != VA_INVALID_ID)
++        else if (This->current != NULL)
+             WARN("decoder destroyed while decoding frame\n");
+ 
+         if (This->vaSlice != VA_INVALID_ID)
+@@ -434,11 +434,13 @@ static ULONG WINAPI DirectXVideoDecoderMPEG2_Release( IDirectXVideoDecoder *ifac
+         for (i = 0; i < This->surfaceCount; i++)
+         {
+             IDirect3DSurface9_Release( This->surfaceMap[i].d3dSurface );
+-            vaDestroySurfaces( va_display, &This->surfaceMap[i].vaapiSurface, 1 );
++            vaDestroySurfaces( va_display, &This->surfaceMap[i].vaSurface, 1 );
+         }
+ 
++        vaDestroyImage( va_display, This->vaImage.image_id );
++
+         vaDestroyContext( va_display, This->context );
+-        vaDestroyConfig ( va_display, This->config);
++        vaDestroyConfig( va_display, This->config);
+ 
+         IDirectXVideoDecoderService_Release(This->videodecoder);
+ 
+@@ -479,7 +481,7 @@ static HRESULT WINAPI DirectXVideoDecoderMPEG2_GetBuffer( IDirectXVideoDecoder *
+     if (!ppBuffer || !pBufferSize)
+         return E_INVALIDARG;
+ 
+-    if (This->currentSurface == VA_INVALID_ID)
++    if (This->current == NULL)
+     {
+         ERR("called without frame context\n");
+         return E_FAIL;
+@@ -615,7 +617,7 @@ err:
+ static HRESULT WINAPI DirectXVideoDecoderMPEG2_BeginFrame( IDirectXVideoDecoder *iface, IDirect3DSurface9 *pRenderTarget, void *pvPVPData )
+ {
+     DirectXVideoDecoderMPEG2Impl *This = impl_from_DirectXVideoDecoderMPEG2(iface);
+-    VASurfaceID surface = VA_INVALID_ID;
++    struct surface_map_entry *current = NULL;
+     unsigned int i;
+     VAStatus status;
+ 
+@@ -625,11 +627,11 @@ static HRESULT WINAPI DirectXVideoDecoderMPEG2_BeginFrame( IDirectXVideoDecoder
+         return E_INVALIDARG;
+ 
+     /* clean up stuff if the previous frame was not ended properly */
+-    if (This->currentSurface != VA_INVALID_ID)
++    if (This->current != NULL)
+     {
+-        ERR("previous frame was not ended properly - forcing unmap of buffers\n");
++        ERR("previous frame was not ended properly - simulating EndFrame\n");
+         vaEndPicture( va_display, This->context );
+-        This->currentSurface = VA_INVALID_ID;
++        This->current = NULL;
+     }
+ 
+     /* search for new surface */
+@@ -637,17 +639,18 @@ static HRESULT WINAPI DirectXVideoDecoderMPEG2_BeginFrame( IDirectXVideoDecoder
+     {
+         if (This->surfaceMap[i].d3dSurface == pRenderTarget)
+         {
+-            surface = This->surfaceMap[i].vaapiSurface;
++            current = &This->surfaceMap[i];
+             break;
+         }
+     }
+ 
+-    if (surface == VA_INVALID_ID)
++    if (current == NULL)
+     {
+         ERR("render target %p is not in the list of surfaces\n", pRenderTarget);
+         return E_INVALIDARG;
+     }
+ 
++    /* allocate new slice buffer if required */
+     if (This->vaSlice == VA_INVALID_ID)
+     {
+         status = vaCreateBuffer( va_display, This->context, VASliceDataBufferType, This->maxSliceSize, 1, NULL, &This->vaSlice );
+@@ -658,7 +661,8 @@ static HRESULT WINAPI DirectXVideoDecoderMPEG2_BeginFrame( IDirectXVideoDecoder
+         }
+     }
+ 
+-    status = vaBeginPicture( va_display, This->context, surface );
++    /* begin picture */
++    status = vaBeginPicture( va_display, This->context, current->vaSurface );
+     if (status != VA_STATUS_SUCCESS)
+     {
+         ERR("failed to begin picture: %s (0x%x)\n", vaErrorStr(status), status);
+@@ -666,36 +670,102 @@ static HRESULT WINAPI DirectXVideoDecoderMPEG2_BeginFrame( IDirectXVideoDecoder
+     }
+ 
+     /* set the new current frame */
+-    This->currentSurface = surface;
++    This->current = current;
+     return S_OK;
+ }
+ 
+ static HRESULT WINAPI DirectXVideoDecoderMPEG2_EndFrame( IDirectXVideoDecoder *iface, HANDLE *pHandleComplete )
+ {
+     DirectXVideoDecoderMPEG2Impl *This = impl_from_DirectXVideoDecoderMPEG2(iface);
++    struct surface_map_entry *current;
++    D3DSURFACE_DESC d3ddesc;
++    D3DLOCKED_RECT d3drect;
++    char *buffer;
+     VAStatus status;
++    HRESULT hr;
+ 
+     TRACE("(%p)->(%p)\n", This, pHandleComplete);
+ 
+-    if (This->currentSurface == VA_INVALID_ID)
++    if (This->current == NULL)
+     {
+         ERR("called without frame context\n");
+         return E_FAIL;
+     }
+ 
++    /* remember the last frame, unset current */
++    current = This->current;
++    This->current = NULL;
++
+     status = vaEndPicture( va_display, This->context );
+     if (status != VA_STATUS_SUCCESS)
+     {
+         ERR("ending picture failed: %s (0x%x)\n", vaErrorStr(status), status);
+-        This->currentSurface = VA_INVALID_ID;
+         return E_FAIL;
+     }
+ 
+-    /* TODO: transfer data to D3D Surface */
++    vaSyncSurface( va_display, current->vaSurface );
+ 
+-    /* end current frame */
+-    This->currentSurface = VA_INVALID_ID;
+-    return S_OK;
++    status = vaGetImage( va_display, current->vaSurface, 0, 0, This->width, This->height, This->vaImage.image_id );
++    if (status != VA_STATUS_SUCCESS)
++    {
++        ERR("failed to get image: %s (0x%x)\n", vaErrorStr(status), status);
++        return E_FAIL;
++    }
++
++    status = vaMapBuffer( va_display, This->vaImage.buf, (void **)&buffer );
++    if (status != VA_STATUS_SUCCESS)
++    {
++        ERR("failed to map image buffer: %s (0x%x)\n", vaErrorStr(status), status);
++        return E_FAIL;
++    }
++
++    hr = IDirect3DSurface9_GetDesc( current->d3dSurface, &d3ddesc );
++    if (FAILED(hr))
++        goto err;
++
++    hr = IDirect3DSurface9_LockRect( current->d3dSurface, &d3drect, NULL, D3DLOCK_DISCARD );
++    if (SUCCEEDED(hr))
++    {
++        int height;
++        char *s, *d;
++
++        /* TODO: add some algorithm here to ensure that the
++         * surface format matches the format of the image. */
++        assert( d3ddesc.Format == MAKEFOURCC('N','V','1','2') );
++        assert( d3ddesc.Width == This->vaImage.width );
++        assert( d3ddesc.Height == This->vaImage.height );
++        assert( This->vaImage.num_planes == 2 );
++
++        s = buffer + This->vaImage.offsets[0];
++        d = d3drect.pBits;
++
++        for (height = This->vaImage.height; height; height--)
++        {
++            memcpy( d, s, This->vaImage.width );
++            s += This->vaImage.pitches[0];
++            d += This->vaImage.width;
++        }
++
++        s = buffer + This->vaImage.offsets[1];
++        d = (char *)d3drect.pBits + This->vaImage.width * This->vaImage.height;
++
++        for (height = This->vaImage.height / 2; height; height--)
++        {
++            memcpy( d, s, This->vaImage.width );
++            s += This->vaImage.pitches[1];
++            d += This->vaImage.width;
++        }
++
++        IDirect3DSurface9_UnlockRect( current->d3dSurface );
++    }
++    else
++        ERR("failed to lock d3d9 surface\n");
++
++err:
++    if (vaUnmapBuffer( va_display, This->vaImage.buf ) != VA_STATUS_SUCCESS)
++        hr = E_FAIL;
++
++    return hr;
+ }
+ 
+ static HRESULT WINAPI DirectXVideoDecoderMPEG2_Execute( IDirectXVideoDecoder *iface, const DXVA2_DecodeExecuteParams *pExecuteParams )
+@@ -768,6 +838,7 @@ HRESULT mpeg2decoder_create( IDirectXVideoDecoderService *videodecoder, const DX
+     VAConfigAttrib codecAttrib;
+     VASurfaceAttrib surfaceAttrib;
+     VASurfaceID *surfaces = NULL;
++    VAImageFormat imageFormat;
+     VAStatus status;
+     unsigned int i;
+ 
+@@ -804,13 +875,14 @@ HRESULT mpeg2decoder_create( IDirectXVideoDecoderService *videodecoder, const DX
+     mpeg2decoder->width        = pVideoDesc->SampleWidth;
+     mpeg2decoder->height       = pVideoDesc->SampleHeight;
+     mpeg2decoder->maxSliceSize = estimate_maximum_slice_size( pVideoDesc->SampleWidth, pVideoDesc->SampleHeight );
++    mpeg2decoder->vaImage.image_id = VA_INVALID_ID;
+ 
+     mpeg2decoder->config  = 0;
+     mpeg2decoder->context = 0;
+ 
+     mpeg2decoder->surfaceCount   = NumSurfaces;
+     mpeg2decoder->surfaceMap     = NULL;
+-    mpeg2decoder->currentSurface = VA_INVALID_ID;
++    mpeg2decoder->current        = NULL;
+ 
+     mpeg2decoder->vaSlice = VA_INVALID_ID;
+ 
+@@ -829,6 +901,19 @@ HRESULT mpeg2decoder_create( IDirectXVideoDecoderService *videodecoder, const DX
+         goto err;
+     }
+ 
++    /* TODO: use lookup table instead of hardcoded values */
++    memset(&imageFormat, 0, sizeof(imageFormat));
++    imageFormat.fourcc         = format->vafourcc;
++    imageFormat.byte_order     = VA_LSB_FIRST;
++    imageFormat.bits_per_pixel = 12;
++
++    status = vaCreateImage( va_display, &imageFormat, mpeg2decoder->width, mpeg2decoder->height, &mpeg2decoder->vaImage );
++    if (status != VA_STATUS_SUCCESS)
++    {
++        ERR("failed to create image: %s (0x%x)\n", vaErrorStr(status), status);
++        goto err;
++    }
++
+     surfaces = HeapAlloc( GetProcessHeap(), 0, sizeof(VASurfaceID) * NumSurfaces );
+     if (!surfaces)
+         goto err;
+@@ -858,7 +943,7 @@ HRESULT mpeg2decoder_create( IDirectXVideoDecoderService *videodecoder, const DX
+     if (!mpeg2decoder->surfaceMap)
+         goto err;
+ 
+-    status = vaCreateContext( va_display, mpeg2decoder->config, pVideoDesc->SampleWidth, pVideoDesc->SampleHeight, VA_PROGRESSIVE, surfaces, NumSurfaces, &mpeg2decoder->context );
++    status = vaCreateContext( va_display, mpeg2decoder->config, mpeg2decoder->width, mpeg2decoder->height, VA_PROGRESSIVE, surfaces, NumSurfaces, &mpeg2decoder->context );
+     if (status != VA_STATUS_SUCCESS)
+     {
+         ERR("failed to create context: %s (0x%x)\n", vaErrorStr(status), status);
+@@ -868,7 +953,7 @@ HRESULT mpeg2decoder_create( IDirectXVideoDecoderService *videodecoder, const DX
+     for (i = 0; i < NumSurfaces; i++)
+     {
+         mpeg2decoder->surfaceMap[i].d3dSurface   = ppDecoderRenderTargets[i];
+-        mpeg2decoder->surfaceMap[i].vaapiSurface = surfaces[i];
++        mpeg2decoder->surfaceMap[i].vaSurface    = surfaces[i];
+         IDirect3DSurface9_AddRef( ppDecoderRenderTargets[i] );
+     }
+ 
+@@ -891,10 +976,13 @@ err:
+         HeapFree( GetProcessHeap(), 0, surfaces );
+     }
+ 
++    if (mpeg2decoder->vaImage.image_id != VA_INVALID_ID)
++        vaDestroyImage( va_display, mpeg2decoder->vaImage.image_id );
++
+     if (mpeg2decoder->config)
+         vaDestroyConfig( va_display, mpeg2decoder->config );
+ 
+     CoTaskMemFree( mpeg2decoder );
+     dxva2_mutex_unlock();
+     return E_FAIL;
+-}
+\ No newline at end of file
++}
+-- 
+1.8.3.2
+

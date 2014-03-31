@@ -1,0 +1,77 @@
+From 748fe80d8edd9ed48a9097ac100b81dfee13b9ba Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Michael=20M=C3=BCller?= <michael@fds-team.de>
+Date: Tue, 1 Apr 2014 01:10:47 +0200
+Subject: dxva2: allow to use surfaces with a different size than the decoder
+ image size
+
+---
+ dlls/dxva2/mpeg2decoder.c  | 21 +++++++++++----------
+ dlls/dxva2/videoservices.c |  2 +-
+ 2 files changed, 12 insertions(+), 11 deletions(-)
+
+diff --git a/dlls/dxva2/mpeg2decoder.c b/dlls/dxva2/mpeg2decoder.c
+index 0509ba6..e39680f 100644
+--- a/dlls/dxva2/mpeg2decoder.c
++++ b/dlls/dxva2/mpeg2decoder.c
+@@ -726,34 +726,35 @@ static HRESULT WINAPI DirectXVideoDecoderMPEG2_EndFrame( IDirectXVideoDecoder *i
+     hr = IDirect3DSurface9_LockRect( current->d3dSurface, &d3drect, NULL, D3DLOCK_DISCARD );
+     if (SUCCEEDED(hr))
+     {
+-        int height;
++        int y, minHeight, minWidth;
+         char *s, *d;
+ 
+         /* TODO: add some algorithm here to ensure that the
+          * surface format matches the format of the image. */
+         assert( d3ddesc.Format == MAKEFOURCC('N','V','1','2') );
+-        assert( d3ddesc.Width == This->vaImage.width );
+-        assert( d3ddesc.Height == This->vaImage.height );
+         assert( This->vaImage.num_planes == 2 );
+ 
++        minHeight = (d3ddesc.Height < This->vaImage.height) ? d3ddesc.Height : This->vaImage.height;
++        minWidth  = (d3ddesc.Width  < This->vaImage.width)  ? d3ddesc.Width : This->vaImage.width;
++
+         s = buffer + This->vaImage.offsets[0];
+         d = d3drect.pBits;
+ 
+-        for (height = This->vaImage.height; height; height--)
++        for (y = minHeight; y; y--)
+         {
+-            memcpy( d, s, This->vaImage.width );
++            memcpy( d, s, minWidth );
+             s += This->vaImage.pitches[0];
+-            d += This->vaImage.width;
++            d += d3ddesc.Width;
+         }
+ 
+         s = buffer + This->vaImage.offsets[1];
+-        d = (char *)d3drect.pBits + This->vaImage.width * This->vaImage.height;
++        d = (char *)d3drect.pBits + d3ddesc.Width * d3ddesc.Height;
+ 
+-        for (height = This->vaImage.height / 2; height; height--)
++        for (y = minHeight / 2; y; y--)
+         {
+-            memcpy( d, s, This->vaImage.width );
++            memcpy( d, s, minWidth );
+             s += This->vaImage.pitches[1];
+-            d += This->vaImage.width;
++            d += d3ddesc.Width;
+         }
+ 
+         IDirect3DSurface9_UnlockRect( current->d3dSurface );
+diff --git a/dlls/dxva2/videoservices.c b/dlls/dxva2/videoservices.c
+index 6f065a4..bf4fac1 100644
+--- a/dlls/dxva2/videoservices.c
++++ b/dlls/dxva2/videoservices.c
+@@ -75,7 +75,7 @@ const struct dxva2_formats format_table[] =
+     {D3DFMT_UYVY,                 VA_FOURCC_UYVY, VA_RT_FORMAT_YUV422, FALSE},
+     {D3DFMT_YUY2,                 VA_FOURCC_YUY2, VA_RT_FORMAT_YUV422, FALSE},
+     {MAKEFOURCC('A','Y','U','V'), VA_FOURCC_AYUV, 0,                   FALSE},
+-    {MAKEFOURCC('Y','V','1','2'), VA_FOURCC_YV12, 0,                   FALSE}, /* TODO */
++    {MAKEFOURCC('Y','V','1','2'), VA_FOURCC_YV12, VA_RT_FORMAT_YUV420, FALSE}, /* TODO */
+     {0,                           VA_FOURCC_P208, 0,                   FALSE}, /* TODO */
+     {MAKEFOURCC('I','Y','U','V'), VA_FOURCC_IYUV, VA_RT_FORMAT_YUV411, FALSE},
+     {MAKEFOURCC('Y','V','2','4'), VA_FOURCC_YV24, 0,                   FALSE}, /* TODO */
+-- 
+1.8.3.2
+
