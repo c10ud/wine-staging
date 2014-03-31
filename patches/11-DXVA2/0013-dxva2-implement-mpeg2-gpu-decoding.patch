@@ -1,0 +1,1215 @@
+From ea50f77661ad50a3398f90fb0f95ec8e39782d50 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Michael=20M=C3=BCller?= <michael@fds-team.de>
+Date: Mon, 31 Mar 2014 06:42:55 +0200
+Subject: dxva2: implement mpeg2 gpu decoding
+
+---
+ dlls/dxva2/devicemanager.c |   4 +-
+ dlls/dxva2/dxva2_private.h |  24 +-
+ dlls/dxva2/mpeg2decoder.c  | 736 +++++++++++++++++++++++++++++++++++++++++++--
+ dlls/dxva2/videoservices.c |  64 ++--
+ include/Makefile.in        |   1 +
+ include/dxva.h             |  96 ++++++
+ include/dxva2api.idl       |  10 +
+ 7 files changed, 886 insertions(+), 49 deletions(-)
+ create mode 100644 include/dxva.h
+
+diff --git a/dlls/dxva2/devicemanager.c b/dlls/dxva2/devicemanager.c
+index da37eb8..823eb66 100644
+--- a/dlls/dxva2/devicemanager.c
++++ b/dlls/dxva2/devicemanager.c
+@@ -140,8 +140,10 @@ static HRESULT WINAPI Direct3DDeviceManager9_CloseDeviceHandle( IDirect3DDeviceM
+ static HRESULT WINAPI Direct3DDeviceManager9_TestDevice( IDirect3DDeviceManager9 *iface, HANDLE hDevice )
+ {
+     Direct3DDeviceManager9Impl *This = impl_from_Direct3DDeviceManager9(iface);
++    static int once = 0;
+ 
+-    FIXME("(%p)->(%p): stub\n", This, hDevice);
++    if (!once++)
++        FIXME("(%p)->(%p): stub\n", This, hDevice);
+ 
+     return S_OK;
+ }
+diff --git a/dlls/dxva2/dxva2_private.h b/dlls/dxva2/dxva2_private.h
+index 7976275..965fc86 100644
+--- a/dlls/dxva2/dxva2_private.h
++++ b/dlls/dxva2/dxva2_private.h
+@@ -29,6 +29,22 @@ typedef struct
+     IDirect3DDevice9 *device;
+ } DirectXVideoAccelerationServiceImpl;
+ 
++struct dxva2_profiles
++{
++    const int profile;
++    const int entryPoint;
++    const GUID* guid;
++    BOOL supported;
++};
++
++struct dxva2_formats
++{
++    const D3DFORMAT d3dformat;
++    const unsigned int vafourcc;
++    const unsigned int vaformat;
++    const BOOL fallback;
++};
++
+ extern BOOL va_initialized  DECLSPEC_HIDDEN;
+ extern Display *x11_display DECLSPEC_HIDDEN;
+ extern VADisplay va_display DECLSPEC_HIDDEN;
+@@ -36,7 +52,13 @@ extern VADisplay va_display DECLSPEC_HIDDEN;
+ extern void dxva2_mutex_lock( void )   DECLSPEC_HIDDEN;
+ extern void dxva2_mutex_unlock( void ) DECLSPEC_HIDDEN;
+ 
++extern struct dxva2_profiles *dxva2_lookup_guid( const GUID *guid ) DECLSPEC_HIDDEN;
++extern struct dxva2_profiles *dxva2_lookup_vaprofile( int profile, int entryPoint ) DECLSPEC_HIDDEN;
++extern const struct dxva2_formats *dxva2_lookup_d3dformat( D3DFORMAT d3dformat ) DECLSPEC_HIDDEN;
++
+ extern BOOL    videoservice_init( void ) DECLSPEC_HIDDEN;
+ extern HRESULT videoservice_create( IDirect3DDevice9 *device, REFIID riid, void **ppv ) DECLSPEC_HIDDEN;
+ extern HRESULT devicemanager_create( UINT *resetToken, void **ppv ) DECLSPEC_HIDDEN;
+-extern HRESULT mpeg2decoder_create( IDirectXVideoDecoderService *videodecoder, void **ppv ) DECLSPEC_HIDDEN;
++
++extern HRESULT mpeg2decoder_create( IDirectXVideoDecoderService *videodecoder, const DXVA2_VideoDesc *pVideoDesc, DXVA2_ConfigPictureDecode *pConfig,
++         IDirect3DSurface9 **ppDecoderRenderTargets, UINT NumSurfaces, IDirectXVideoDecoder **ppDecode ) DECLSPEC_HIDDEN;
+diff --git a/dlls/dxva2/mpeg2decoder.c b/dlls/dxva2/mpeg2decoder.c
+index 7a4e65d..0e68e70 100644
+--- a/dlls/dxva2/mpeg2decoder.c
++++ b/dlls/dxva2/mpeg2decoder.c
+@@ -16,6 +16,8 @@
+  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
+  */
+ 
++#include <va/va_x11.h>
++#undef Status
+ #include <stdarg.h>
+ #include "windef.h"
+ #include "winbase.h"
+@@ -24,21 +26,348 @@
+ 
+ #define COBJMACROS
+ #include "dxva2api.h"
++#include "dxva.h"
+ #include "dxva2_private.h"
+ #include "PhysicalMonitorEnumerationAPI.h"
+ #include "LowLevelMonitorConfigurationAPI.h"
+ #include "HighLevelMonitorConfigurationAPI.h"
+ 
++#include <stdio.h> /* REMOVE THIS, ONLY DEBUGGING */
++
++#define SLICE_MAX_START_CODE 0x000001af
++#define SLICE_MIN_START_CODE 0x00000101
++
++#define MAX_SLICES (SLICE_MAX_START_CODE - SLICE_MIN_START_CODE + 1)
++
+ WINE_DEFAULT_DEBUG_CHANNEL(dxva2);
+ 
++
++static inline int estimate_maximum_slice_size( int width, int height )
++{
++    int macroBlocksX = (width  + 15) / 16;
++    int macroBlocksY = (height + 15) / 16;
++
++    /* We assume that a Macroblock may not have more than 24 byte of data and multiply it with 3 to include headers */
++    return 3 * macroBlocksX * macroBlocksY * 24;
++}
++
++struct surface_map_entry
++{
++    IDirect3DSurface9 *d3dSurface;
++    VASurfaceID vaapiSurface;
++};
++
+ typedef struct
+ {
+     IDirectXVideoDecoder IDirectXVideoDecoder_iface;
+ 
+     LONG refCount;
+     IDirectXVideoDecoderService *videodecoder;
++
++    /* video attributes */
++    int width;
++    int height;
++    int maxSliceSize;
++
++    /* surfaces used by this decoder */
++    UINT surfaceCount;
++    struct surface_map_entry *surfaceMap;
++    VASurfaceID currentSurface;
++
++    /* configuration and context of the decoder */
++    VAConfigID config;
++    VAContextID context;
++
++    /* provided via GetBuffer(), converted later to real surface buffers */
++    DXVA_PictureParameters d3dPictureParam;
++    DXVA_QmatrixData d3dIQMatrix;
++    DXVA_SliceInfo d3dSliceInfo[MAX_SLICES];
++
++    /* slice buffer id */
++    VABufferID vaSlice;
++
++    /* stores if the specific buffers are mapped */
++    int mapCountPictureParam;
++    int mapCountIQMatrix;
++    int mapCountSliceInfo;
++    int mapCountSlice;
++
+ } DirectXVideoDecoderMPEG2Impl;
+ 
++static BOOL process_picture_parameters( DirectXVideoDecoderMPEG2Impl *This, DXVA2_DecodeBufferDesc *desc )
++{
++    VAPictureParameterBufferMPEG2 *params = NULL;
++    VABufferID vaPictureParam;
++    VAStatus status;
++
++    if (This->mapCountPictureParam)
++    {
++        ERR("picture parameters buffer is still mapped\n");
++        return FALSE;
++    }
++
++    /* check for valid parameters */
++
++    if (desc->DataSize != sizeof(This->d3dPictureParam))
++    {
++        ERR("picture parameters size is invalid (got %d, expected %d)\n", desc->DataSize, sizeof(This->d3dPictureParam));
++        return FALSE;
++    }
++    else if (This->d3dPictureParam.wForwardRefPictureIndex != 0xFFFF && This->d3dPictureParam.wForwardRefPictureIndex >= This->surfaceCount)
++    {
++        ERR("invalid forward surface reference index\n");
++        return FALSE;
++    }
++    else if (This->d3dPictureParam.wBackwardRefPictureIndex != 0xFFFF && This->d3dPictureParam.wBackwardRefPictureIndex >= This->surfaceCount)
++    {
++        ERR("invalid backward surface reference index\n");
++        return FALSE;
++    }
++
++    status = vaCreateBuffer( va_display, This->context, VAPictureParameterBufferType, sizeof(VAPictureParameterBufferMPEG2), 1, NULL, &vaPictureParam );
++    if (status != VA_STATUS_SUCCESS)
++    {
++        ERR("failed to create picture parameter buffer: %s (0x%x)\n", vaErrorStr(status), status);
++        return FALSE;
++    }
++
++    status = vaMapBuffer(va_display, vaPictureParam, (void **)&params);
++    if (status != VA_STATUS_SUCCESS)
++    {
++        ERR("failed to map picture parameter buffer: %s (0x%x)\n", vaErrorStr(status), status);
++        goto err;
++    }
++
++    memset(params, 0, sizeof(*params));
++
++    params->horizontal_size = This->width;
++    params->vertical_size = This->height;
++
++    params->forward_reference_picture = (This->d3dPictureParam.wForwardRefPictureIndex != 0xFFFF) ?
++        This->surfaceMap[This->d3dPictureParam.wForwardRefPictureIndex].vaapiSurface : VA_INVALID_ID;
++
++    params->backward_reference_picture = (This->d3dPictureParam.wBackwardRefPictureIndex != 0xFFFF) ?
++        This->surfaceMap[This->d3dPictureParam.wBackwardRefPictureIndex].vaapiSurface : VA_INVALID_ID;
++
++    /*
++     *  picture_coding_type can have the following values :
++     *      1 - I Frame - not references to other images
++     *      2 - P Frame - reference to previous image
++     *      3 - B Frame - reference to previous and next image
++    */
++    if (This->d3dPictureParam.bPicIntra)
++        params->picture_coding_type = 1;
++    else if (This->d3dPictureParam.bPicBackwardPrediction)
++        params->picture_coding_type = 3;
++    else
++        params->picture_coding_type = 2;
++
++    params->f_code = This->d3dPictureParam.wBitstreamFcodes;
++
++    /* see http://msdn.microsoft.com/en-us/library/windows/hardware/ff564012(v=vs.85).aspx */
++
++    params->picture_coding_extension.value = 0;
++    params->picture_coding_extension.bits.intra_dc_precision         = (This->d3dPictureParam.wBitstreamPCEelements >> 14) & 3;
++    params->picture_coding_extension.bits.picture_structure          = (This->d3dPictureParam.wBitstreamPCEelements >> 12) & 3;
++    params->picture_coding_extension.bits.top_field_first            = (This->d3dPictureParam.wBitstreamPCEelements >> 11) & 1;
++    params->picture_coding_extension.bits.frame_pred_frame_dct       = (This->d3dPictureParam.wBitstreamPCEelements >> 10) & 1;
++    params->picture_coding_extension.bits.concealment_motion_vectors = (This->d3dPictureParam.wBitstreamPCEelements >> 9) & 1;
++    params->picture_coding_extension.bits.q_scale_type               = (This->d3dPictureParam.wBitstreamPCEelements >> 8) & 1;
++    params->picture_coding_extension.bits.intra_vlc_format           = (This->d3dPictureParam.wBitstreamPCEelements >> 7) & 1;
++    params->picture_coding_extension.bits.alternate_scan             = (This->d3dPictureParam.wBitstreamPCEelements >> 6) & 1;
++    params->picture_coding_extension.bits.repeat_first_field         = (This->d3dPictureParam.wBitstreamPCEelements >> 5) & 1;
++    params->picture_coding_extension.bits.progressive_frame          = (This->d3dPictureParam.wBitstreamPCEelements >> 3) & 1;
++    params->picture_coding_extension.bits.is_first_field             = !This->d3dPictureParam.bSecondField;
++
++    if (vaUnmapBuffer( va_display, vaPictureParam ) != VA_STATUS_SUCCESS)
++        goto err;
++
++    /* vaRenderPicture is supposed to destroy the buffer */
++    status = vaRenderPicture( va_display, This->context, &vaPictureParam, 1 );
++    if (status == VA_STATUS_SUCCESS)
++        return TRUE;
++
++    ERR("failed to process picture parameter buffer: %s (0x%x)\n", vaErrorStr(status), status);
++
++err:
++    vaDestroyBuffer( va_display, vaPictureParam );
++    return FALSE;
++}
++
++
++static BOOL process_quantization_matrix( DirectXVideoDecoderMPEG2Impl *This, const DXVA2_DecodeBufferDesc *desc )
++{
++    VAIQMatrixBufferMPEG2 *matrix = NULL;
++    VABufferID vaIQMatrix;
++    VAStatus status;
++    int i;
++
++    if (This->mapCountIQMatrix)
++    {
++        ERR("quantization matrix buffer is still mapped\n");
++        return FALSE;
++    }
++
++    /* check for valid parameters */
++
++    if (desc->DataSize != sizeof(This->d3dIQMatrix))
++    {
++        ERR("quantization matrix size is invalid (got %d, expected %d)\n", desc->DataSize, sizeof(This->d3dIQMatrix));
++        return FALSE;
++    }
++
++    status = vaCreateBuffer( va_display, This->context, VAIQMatrixBufferType, sizeof(VAIQMatrixBufferMPEG2), 1, NULL, &vaIQMatrix );
++    if (status != VA_STATUS_SUCCESS)
++    {
++        ERR("failed to create quantization matrix buffer: %s (0x%x)\n", vaErrorStr(status), status);
++        return FALSE;
++    }
++
++    status = vaMapBuffer(va_display, vaIQMatrix, (void **)&matrix);
++    if (status != VA_STATUS_SUCCESS)
++    {
++        ERR("failed to map quantization matrix buffer: %s (0x%x)\n", vaErrorStr(status), status);
++        goto err;
++    }
++
++    memset(matrix, 0, sizeof(*matrix));
++
++    matrix->load_intra_quantiser_matrix            = This->d3dIQMatrix.bNewQmatrix[0];
++    matrix->load_non_intra_quantiser_matrix        = This->d3dIQMatrix.bNewQmatrix[1];
++    matrix->load_chroma_intra_quantiser_matrix     = This->d3dIQMatrix.bNewQmatrix[2];
++    matrix->load_chroma_non_intra_quantiser_matrix = This->d3dIQMatrix.bNewQmatrix[3];
++
++    /*
++     *  In theory we could just copy the matrix, but
++     *  "The matrix consists of [...] unsigned words (in which only the lower 8 bits of each word are used [...])""
++     *  (see: http://msdn.microsoft.com/en-us/library/windows/hardware/ff564034(v=vs.85).aspx)
++     */
++    for (i = 0; i < 64; i++)
++    {
++        matrix->intra_quantiser_matrix[i]            = This->d3dIQMatrix.Qmatrix[0][i];
++        matrix->non_intra_quantiser_matrix[i]        = This->d3dIQMatrix.Qmatrix[1][i];
++        matrix->chroma_intra_quantiser_matrix[i]     = This->d3dIQMatrix.Qmatrix[2][i];
++        matrix->chroma_non_intra_quantiser_matrix[i] = This->d3dIQMatrix.Qmatrix[3][i];
++    }
++
++    if (vaUnmapBuffer( va_display, vaIQMatrix ) != VA_STATUS_SUCCESS)
++        goto err;
++
++    /* vaRenderPicture is supposed to destroy the buffer */
++    status = vaRenderPicture( va_display, This->context, &vaIQMatrix, 1 );
++    if (status == VA_STATUS_SUCCESS)
++        return TRUE;
++
++    ERR("failed to process quantization matrix buffer: %s (0x%x)\n", vaErrorStr(status), status);
++
++err:
++    vaDestroyBuffer( va_display, vaIQMatrix );
++    return FALSE;
++}
++
++static BOOL process_slice_control_buffer( DirectXVideoDecoderMPEG2Impl *This, const DXVA2_DecodeBufferDesc *desc )
++{
++    VASliceParameterBufferMPEG2 *slice = NULL;
++    VABufferID vaSliceInfo;
++    VAStatus status;
++    int sliceCount, i;
++
++    if (This->mapCountSliceInfo)
++    {
++        ERR("slice control buffer is still mapped\n");
++        return FALSE;
++    }
++
++    /* check for valid parameters */
++
++    if (desc->DataSize % sizeof(DXVA_SliceInfo) != 0 || desc->DataSize == 0)
++    {
++        ERR("slice control buffer size is invalid (got %d, expected multiple of %d)\n", desc->DataSize, sizeof(DXVA_SliceInfo));
++        return FALSE;
++    }
++
++    sliceCount = desc->DataSize / sizeof(DXVA_SliceInfo);
++
++    status = vaCreateBuffer( va_display, This->context, VASliceParameterBufferType, sizeof(VASliceParameterBufferMPEG2), sliceCount, NULL, &vaSliceInfo );
++    if (status != VA_STATUS_SUCCESS)
++    {
++        ERR("failed to create slice control buffer: %s (0x%x)\n", vaErrorStr(status), status);
++        return FALSE;
++    }
++
++    status = vaMapBuffer( va_display, vaSliceInfo, (void **)&slice );
++    if (status != VA_STATUS_SUCCESS)
++    {
++        ERR("failed to map slice control buffer: %s (0x%x)\n", vaErrorStr(status), status);
++        goto err;
++    }
++
++    for (i = 0; i < sliceCount; i++)
++    {
++        slice[i].slice_data_size    = This->d3dSliceInfo[i].dwSliceBitsInBuffer / 8;
++        slice[i].slice_data_offset  = This->d3dSliceInfo[i].dwSliceDataLocation;
++
++        switch (This->d3dSliceInfo[i].wBadSliceChopping)
++        {
++            case 0: slice[i].slice_data_flag = VA_SLICE_DATA_FLAG_ALL; break;
++            case 1: slice[i].slice_data_flag = VA_SLICE_DATA_FLAG_BEGIN; break;
++            case 2: slice[i].slice_data_flag = VA_SLICE_DATA_FLAG_END; break;
++            case 3: slice[i].slice_data_flag = VA_SLICE_DATA_FLAG_MIDDLE; break;
++            default:
++            {
++                ERR("invalid wBadSliceChopping value %d - assuming VA_SLICE_DATA_FLAG_ALL\n", This->d3dSliceInfo[i].wBadSliceChopping);
++                slice[i].slice_data_flag = VA_SLICE_DATA_FLAG_ALL;
++                break;
++            }
++        }
++
++        slice[i].macroblock_offset         = This->d3dSliceInfo[i].wMBbitOffset;
++        slice[i].slice_horizontal_position = This->d3dSliceInfo[i].wHorizontalPosition;
++        slice[i].slice_vertical_position   = This->d3dSliceInfo[i].wVerticalPosition;
++        slice[i].quantiser_scale_code      = This->d3dSliceInfo[i].wQuantizerScaleCode;
++        slice[i].intra_slice_flag          = (This->d3dSliceInfo[i].wMBbitOffset > 38); /* magic */
++    }
++
++    if (vaUnmapBuffer( va_display, vaSliceInfo ) != VA_STATUS_SUCCESS)
++        goto err;
++
++    /* vaRenderPicture is supposed to destroy the buffer */
++    status = vaRenderPicture( va_display, This->context, &vaSliceInfo, 1 );
++    if (status == VA_STATUS_SUCCESS)
++        return TRUE;
++
++    ERR("failed to process slice control buffer: %s (0x%x)\n", vaErrorStr(status), status);
++
++err:
++    vaDestroyBuffer( va_display, vaSliceInfo );
++    return FALSE;
++}
++
++static BOOL process_date_buffer( DirectXVideoDecoderMPEG2Impl *This, const DXVA2_DecodeBufferDesc *desc )
++{
++    VAStatus status;
++
++    if (!This->vaSlice)
++        return FALSE;
++
++    if (This->mapCountSliceInfo)
++    {
++        ERR("slice buffer is still mapped\n");
++        return FALSE;
++    }
++
++    /* vaRenderPicture is supposed to destroy the buffer */
++    status = vaRenderPicture( va_display, This->context, &This->vaSlice, 1 );
++    if (status != VA_STATUS_SUCCESS)
++    {
++        ERR("failed to process slice buffer: %s (0x%x)\n", vaErrorStr(status), status);
++        return FALSE;
++    }
++
++    This->vaSlice = VA_INVALID_ID;
++    return TRUE;
++}
++
+ static inline DirectXVideoDecoderMPEG2Impl *impl_from_DirectXVideoDecoderMPEG2( IDirectXVideoDecoder *iface )
+ {
+     return CONTAINING_RECORD(iface, DirectXVideoDecoderMPEG2Impl, IDirectXVideoDecoder_iface);
+@@ -82,13 +411,38 @@ static ULONG WINAPI DirectXVideoDecoderMPEG2_Release( IDirectXVideoDecoder *ifac
+ {
+     DirectXVideoDecoderMPEG2Impl *This = impl_from_DirectXVideoDecoderMPEG2(iface);
+     ULONG refCount = InterlockedDecrement(&This->refCount);
++    unsigned int i;
+ 
+     TRACE("(%p)->() Release from %d\n", This, refCount + 1);
+ 
+     if (!refCount)
+     {
+         TRACE("Destroying\n");
++
++        if (This->mapCountPictureParam || This->mapCountIQMatrix || This->mapCountSliceInfo || This->mapCountSlice)
++            WARN("decoder destroyed while buffer is mapped\n");
++        else if (This->currentSurface != VA_INVALID_ID)
++            WARN("decoder destroyed while decoding frame\n");
++
++        if (This->vaSlice != VA_INVALID_ID)
++        {
++            if (This->mapCountSlice)
++                vaUnmapBuffer( va_display, This->vaSlice );
++            vaDestroyBuffer( va_display, This->vaSlice );
++        }
++
++        for (i = 0; i < This->surfaceCount; i++)
++        {
++            IDirect3DSurface9_Release( This->surfaceMap[i].d3dSurface );
++            vaDestroySurfaces( va_display, &This->surfaceMap[i].vaapiSurface, 1 );
++        }
++
++        vaDestroyContext( va_display, This->context );
++        vaDestroyConfig ( va_display, This->config);
++
+         IDirectXVideoDecoderService_Release(This->videodecoder);
++
++        HeapFree( GetProcessHeap(), 0, This->surfaceMap );
+         CoTaskMemFree(This);
+     }
+ 
+@@ -118,46 +472,277 @@ static HRESULT WINAPI DirectXVideoDecoderMPEG2_GetCreationParameters( IDirectXVi
+ static HRESULT WINAPI DirectXVideoDecoderMPEG2_GetBuffer( IDirectXVideoDecoder *iface, UINT BufferType, void **ppBuffer, UINT *pBufferSize )
+ {
+     DirectXVideoDecoderMPEG2Impl *This = impl_from_DirectXVideoDecoderMPEG2(iface);
++    VAStatus status;
+ 
+-    FIXME("(%p)->(%u, %p, %p)\n", This, BufferType, ppBuffer, pBufferSize);
++    TRACE("(%p)->(%u, %p, %p)\n", This, BufferType, ppBuffer, pBufferSize);
+ 
+-    return E_NOTIMPL;
++    if (!ppBuffer || !pBufferSize)
++        return E_INVALIDARG;
++
++    if (This->currentSurface == VA_INVALID_ID)
++    {
++        ERR("called without frame context\n");
++        return E_FAIL;
++    }
++
++    switch (BufferType)
++    {
++        case DXVA2_PictureParametersBufferType:
++        {
++            if (This->mapCountPictureParam > 0)
++                goto err;
++
++            *ppBuffer    = &This->d3dPictureParam;
++            *pBufferSize = sizeof(This->d3dPictureParam);
++            This->mapCountPictureParam++;
++            break;
++        }
++
++        case DXVA2_InverseQuantizationMatrixBufferType:
++        {
++            if (This->mapCountIQMatrix > 0)
++                goto err;
++
++            *ppBuffer    = &This->d3dIQMatrix;
++            *pBufferSize = sizeof(This->d3dIQMatrix);
++            This->mapCountIQMatrix++;
++            break;
++        }
++
++        case DXVA2_SliceControlBufferType:
++        {
++            if (This->mapCountSliceInfo > 0)
++                goto err;
++
++            *ppBuffer = &This->d3dSliceInfo;
++            *pBufferSize = sizeof(This->d3dSliceInfo);
++            This->mapCountSliceInfo++;
++            break;
++        }
++
++        case DXVA2_BitStreamDateBufferType:
++        {
++            if (This->mapCountSlice > 0)
++                goto err;
++
++            if (This->vaSlice == VA_INVALID_ID)
++                return E_FAIL;
++
++            status = vaMapBuffer( va_display, This->vaSlice, ppBuffer );
++            if (status != VA_STATUS_SUCCESS)
++            {
++                ERR("failed to map slice buffer: %s (0x%x)\n", vaErrorStr(status), status);
++                return E_FAIL;
++            }
++
++            *pBufferSize = This->maxSliceSize;
++            This->mapCountSlice++;
++            break;
++        }
++
++        default:
++        {
++            FIXME("unsupported buffer type 0x%x\n", BufferType);
++            return E_INVALIDARG;
++        }
++
++    }
++
++    return S_OK;
++
++err:
++    FIXME("mapping the same buffer (0x%x) multiple times not supported (yet)\n", BufferType);
++    return E_INVALIDARG;
+ }
+ 
+ static HRESULT WINAPI DirectXVideoDecoderMPEG2_ReleaseBuffer( IDirectXVideoDecoder *iface, UINT BufferType )
+ {
+     DirectXVideoDecoderMPEG2Impl *This = impl_from_DirectXVideoDecoderMPEG2(iface);
+ 
+-    FIXME("(%p)->(%u)\n", This, BufferType);
++    TRACE("(%p)->(%u)\n", This, BufferType);
+ 
+-    return E_NOTIMPL;
++    switch (BufferType)
++    {
++        case DXVA2_PictureParametersBufferType:
++        {
++            if (!This->mapCountPictureParam)
++                goto err;
++            This->mapCountPictureParam--;
++            break;
++        }
++
++        case DXVA2_InverseQuantizationMatrixBufferType:
++        {
++            if (!This->mapCountIQMatrix)
++                goto err;
++            This->mapCountIQMatrix--;
++            break;
++        }
++
++        case DXVA2_SliceControlBufferType:
++        {
++            if (!This->mapCountSliceInfo)
++                goto err;
++            This->mapCountSliceInfo--;
++            break;
++        }
++
++        case DXVA2_BitStreamDateBufferType:
++        {
++            if (!This->mapCountSlice)
++                goto err;
++            if (vaUnmapBuffer( va_display, This->vaSlice ) != VA_STATUS_SUCCESS)
++                return E_FAIL;
++            This->mapCountSlice--;
++            break;
++        }
++
++        default:
++        {
++            FIXME("unsupported buffer type 0x%x\n", BufferType);
++            return E_INVALIDARG;
++        }
++
++    }
++
++    return S_OK;
++
++err:
++    ERR("attempt to release unmapped buffer 0x%x\n", BufferType);
++    return E_INVALIDARG;
+ }
+ 
+ static HRESULT WINAPI DirectXVideoDecoderMPEG2_BeginFrame( IDirectXVideoDecoder *iface, IDirect3DSurface9 *pRenderTarget, void *pvPVPData )
+ {
+     DirectXVideoDecoderMPEG2Impl *This = impl_from_DirectXVideoDecoderMPEG2(iface);
++    VASurfaceID surface = VA_INVALID_ID;
++    unsigned int i;
++    VAStatus status;
+ 
+-    FIXME("(%p)->(%p, %p)\n", This, pRenderTarget, pvPVPData);
++    TRACE("(%p)->(%p, %p)\n", This, pRenderTarget, pvPVPData);
+ 
+-    return E_NOTIMPL;
++    if (!pRenderTarget)
++        return E_INVALIDARG;
++
++    /* clean up stuff if the previous frame was not ended properly */
++    if (This->currentSurface != VA_INVALID_ID)
++    {
++        ERR("previous frame was not ended properly - forcing unmap of buffers\n");
++        vaEndPicture( va_display, This->context );
++        This->currentSurface = VA_INVALID_ID;
++    }
++
++    /* search for new surface */
++    for (i = 0; i < This->surfaceCount; i++)
++    {
++        if (This->surfaceMap[i].d3dSurface == pRenderTarget)
++        {
++            surface = This->surfaceMap[i].vaapiSurface;
++            break;
++        }
++    }
++
++    if (surface == VA_INVALID_ID)
++    {
++        ERR("render target %p is not in the list of surfaces\n", pRenderTarget);
++        return E_INVALIDARG;
++    }
++
++    if (This->vaSlice == VA_INVALID_ID)
++    {
++        status = vaCreateBuffer( va_display, This->context, VASliceDataBufferType, This->maxSliceSize, 1, NULL, &This->vaSlice );
++        if (status != VA_STATUS_SUCCESS)
++        {
++            ERR("failed to create slice buffer: %s (0x%x)\n", vaErrorStr(status), status);
++            return E_FAIL;
++        }
++    }
++
++    status = vaBeginPicture( va_display, This->context, surface );
++    if (status != VA_STATUS_SUCCESS)
++    {
++        ERR("failed to begin picture: %s (0x%x)\n", vaErrorStr(status), status);
++        return E_FAIL;
++    }
++
++    /* set the new current frame */
++    This->currentSurface = surface;
++    return S_OK;
+ }
+ 
+ static HRESULT WINAPI DirectXVideoDecoderMPEG2_EndFrame( IDirectXVideoDecoder *iface, HANDLE *pHandleComplete )
+ {
+     DirectXVideoDecoderMPEG2Impl *This = impl_from_DirectXVideoDecoderMPEG2(iface);
++    VAStatus status;
+ 
+-    FIXME("(%p)->(%p)\n", This, pHandleComplete);
++    TRACE("(%p)->(%p)\n", This, pHandleComplete);
+ 
+-    return E_NOTIMPL;
++    if (This->currentSurface == VA_INVALID_ID)
++    {
++        ERR("called without frame context\n");
++        return E_FAIL;
++    }
++
++    status = vaEndPicture( va_display, This->context );
++    if (status != VA_STATUS_SUCCESS)
++    {
++        ERR("ending picture failed: %s (0x%x)\n", vaErrorStr(status), status);
++        This->currentSurface = VA_INVALID_ID;
++        return E_FAIL;
++    }
++
++    /* TODO: transfer data to D3D Surface */
++
++    /* end current frame */
++    This->currentSurface = VA_INVALID_ID;
++    return S_OK;
+ }
+ 
+ static HRESULT WINAPI DirectXVideoDecoderMPEG2_Execute( IDirectXVideoDecoder *iface, const DXVA2_DecodeExecuteParams *pExecuteParams )
+ {
+     DirectXVideoDecoderMPEG2Impl *This = impl_from_DirectXVideoDecoderMPEG2(iface);
++    unsigned int i;
+ 
+-    FIXME("(%p)->(%p)\n", This, pExecuteParams);
++    TRACE("(%p)->(%p)\n", This, pExecuteParams);
+ 
+-    return E_NOTIMPL;
++    if (!pExecuteParams || !pExecuteParams->pCompressedBuffers)
++        return E_INVALIDARG;
++
++    for (i = 0; i < pExecuteParams->NumCompBuffers; i++)
++    {
++        switch (pExecuteParams->pCompressedBuffers[i].CompressedBufferType)
++        {
++
++            case DXVA2_PictureParametersBufferType:
++                if (!process_picture_parameters(This, &pExecuteParams->pCompressedBuffers[i]))
++                    goto err;
++                break;
++
++            case DXVA2_InverseQuantizationMatrixBufferType:
++                if (!process_quantization_matrix(This, &pExecuteParams->pCompressedBuffers[i]))
++                    goto err;
++                break;
++
++            case DXVA2_SliceControlBufferType:
++                if (!process_slice_control_buffer(This, &pExecuteParams->pCompressedBuffers[i]))
++                    goto err;
++                break;
++
++            case DXVA2_BitStreamDateBufferType:
++                if (!process_date_buffer(This, &pExecuteParams->pCompressedBuffers[i]))
++                    goto err;
++                break;
++
++            default:
++                FIXME("unsupported buffer type 0x%x\n", pExecuteParams->pCompressedBuffers[i].CompressedBufferType);
++                break;
++        }
++    }
++
++    return S_OK;
++err:
++    ERR("failed to process buffer type 0x%x\n", pExecuteParams->pCompressedBuffers[i].CompressedBufferType);
++    return E_FAIL;
+ }
+ 
+ static const IDirectXVideoDecoderVtbl DirectXVideoDecoderMPEG2_VTable =
+@@ -174,25 +759,142 @@ static const IDirectXVideoDecoderVtbl DirectXVideoDecoderMPEG2_VTable =
+     DirectXVideoDecoderMPEG2_Execute
+ };
+ 
+-HRESULT mpeg2decoder_create( IDirectXVideoDecoderService *videodecoder, void **ppv )
++HRESULT mpeg2decoder_create( IDirectXVideoDecoderService *videodecoder, const DXVA2_VideoDesc *pVideoDesc, DXVA2_ConfigPictureDecode *pConfig,
++         IDirect3DSurface9 **ppDecoderRenderTargets, UINT NumSurfaces, IDirectXVideoDecoder **ppDecode )
+ {
++    const struct dxva2_formats *format;
++    const struct dxva2_profiles *profile;
+     DirectXVideoDecoderMPEG2Impl *mpeg2decoder;
++    VAConfigAttrib codecAttrib;
++    VASurfaceAttrib surfaceAttrib;
++    VASurfaceID *surfaces = NULL;
++    VAStatus status;
++    unsigned int i;
++
++    if (!va_initialized)
++        return E_FAIL;
+ 
+-    if (!ppv)
++    if (!pVideoDesc || !pConfig || !ppDecoderRenderTargets || !ppDecode)
+         return E_INVALIDARG;
+ 
+-    *ppv = NULL;
++    *ppDecode = NULL;
+ 
+-    mpeg2decoder = CoTaskMemAlloc(sizeof(DirectXVideoDecoderMPEG2Impl));
++    /* MPEG2 B frames can reference up to 2 previously decoded frames */
++    if (NumSurfaces < 3)
++        return E_INVALIDARG;
++
++    format = dxva2_lookup_d3dformat( pVideoDesc->Format );
++    if (!format)
++        return E_INVALIDARG;
++
++    profile = dxva2_lookup_guid( &DXVA2_ModeMPEG2_VLD );
++    if (!profile) /* should never happen */
++        return E_FAIL;
++
++    mpeg2decoder = CoTaskMemAlloc(sizeof(*mpeg2decoder));
+     if (!mpeg2decoder)
+         return E_OUTOFMEMORY;
+ 
++    memset(mpeg2decoder, 0, sizeof(*mpeg2decoder));
++
+     mpeg2decoder->IDirectXVideoDecoder_iface.lpVtbl = &DirectXVideoDecoderMPEG2_VTable;
+-    mpeg2decoder->refCount = 1;
++    mpeg2decoder->refCount     = 1;
+     mpeg2decoder->videodecoder = videodecoder;
+-    *ppv = mpeg2decoder;
+ 
+-    IDirectXVideoDecoderService_AddRef(videodecoder);
++    mpeg2decoder->width        = pVideoDesc->SampleWidth;
++    mpeg2decoder->height       = pVideoDesc->SampleHeight;
++    mpeg2decoder->maxSliceSize = estimate_maximum_slice_size( pVideoDesc->SampleWidth, pVideoDesc->SampleHeight );
++
++    mpeg2decoder->config  = 0;
++    mpeg2decoder->context = 0;
++
++    mpeg2decoder->surfaceCount   = NumSurfaces;
++    mpeg2decoder->surfaceMap     = NULL;
++    mpeg2decoder->currentSurface = VA_INVALID_ID;
++
++    mpeg2decoder->vaSlice = VA_INVALID_ID;
++
++    mpeg2decoder->mapCountPictureParam = 0;
++    mpeg2decoder->mapCountIQMatrix     = 0;
++    mpeg2decoder->mapCountSliceInfo    = 0;
++    mpeg2decoder->mapCountSlice        = 0;
++
++    dxva2_mutex_lock();
++
++    codecAttrib.type = VAConfigAttribRTFormat;
++    codecAttrib.value = format->vaformat;
++    if (vaCreateConfig( va_display, profile->profile, profile->entryPoint, &codecAttrib, 1, &mpeg2decoder->config ) != VA_STATUS_SUCCESS)
++    {
++        ERR("could not create decoder configuration\n");
++        goto err;
++    }
++
++    surfaces = HeapAlloc( GetProcessHeap(), 0, sizeof(VASurfaceID) * NumSurfaces );
++    if (!surfaces)
++        goto err;
++
++    /* TODO: round width/height values ? */
+ 
++    surfaceAttrib.type = VASurfaceAttribPixelFormat;
++    surfaceAttrib.flags = VA_SURFACE_ATTRIB_SETTABLE; /* Do we need to set this ? */
++    surfaceAttrib.value.value.i = format->vafourcc;
++
++    status = vaCreateSurfaces( va_display, format->vaformat, pVideoDesc->SampleWidth, pVideoDesc->SampleHeight, surfaces, NumSurfaces, &surfaceAttrib, 1);
++    if (status == VA_STATUS_ERROR_ATTR_NOT_SUPPORTED)
++    {
++        /*  The vdpau backend doesn't seem to allow setting the surface picture type.
++         * We can only hope that it matches the expected one. */
++        status = vaCreateSurfaces( va_display, format->vaformat, pVideoDesc->SampleWidth, pVideoDesc->SampleHeight, surfaces, NumSurfaces, NULL, 0);
++    }
++    if (status != VA_STATUS_SUCCESS)
++    {
++        ERR("failed to create surfaces: %s (0x%x)\n", vaErrorStr(status), status);
++        HeapFree( GetProcessHeap(), 0, surfaces );
++        surfaces = NULL;
++        goto err;
++    }
++
++    mpeg2decoder->surfaceMap =  HeapAlloc( GetProcessHeap(), 0, sizeof(struct surface_map_entry) * NumSurfaces );
++    if (!mpeg2decoder->surfaceMap)
++        goto err;
++
++    status = vaCreateContext( va_display, mpeg2decoder->config, pVideoDesc->SampleWidth, pVideoDesc->SampleHeight, VA_PROGRESSIVE, surfaces, NumSurfaces, &mpeg2decoder->context );
++    if (status != VA_STATUS_SUCCESS)
++    {
++        ERR("failed to create context: %s (0x%x)\n", vaErrorStr(status), status);
++        goto err;
++    }
++
++    for (i = 0; i < NumSurfaces; i++)
++    {
++        mpeg2decoder->surfaceMap[i].d3dSurface   = ppDecoderRenderTargets[i];
++        mpeg2decoder->surfaceMap[i].vaapiSurface = surfaces[i];
++        IDirect3DSurface9_AddRef( ppDecoderRenderTargets[i] );
++    }
++
++    HeapFree( GetProcessHeap(), 0, surfaces );
++    surfaces = NULL;
++
++    IDirectXVideoDecoderService_AddRef( videodecoder );
++    *ppDecode = &mpeg2decoder->IDirectXVideoDecoder_iface;
++
++    dxva2_mutex_unlock();
+     return S_OK;
++
++err:
++    if (mpeg2decoder->surfaceMap)
++        HeapFree( GetProcessHeap(), 0, mpeg2decoder->surfaceMap );
++
++    if (surfaces)
++    {
++        vaDestroySurfaces( va_display, surfaces, NumSurfaces );
++        HeapFree( GetProcessHeap(), 0, surfaces );
++    }
++
++    if (mpeg2decoder->config)
++        vaDestroyConfig( va_display, mpeg2decoder->config );
++
++    CoTaskMemFree( mpeg2decoder );
++    dxva2_mutex_unlock();
++    return E_FAIL;
+ }
+\ No newline at end of file
+diff --git a/dlls/dxva2/videoservices.c b/dlls/dxva2/videoservices.c
+index ce6188f..6f065a4 100644
+--- a/dlls/dxva2/videoservices.c
++++ b/dlls/dxva2/videoservices.c
+@@ -15,7 +15,8 @@
+  * License along with this library; if not, write to the Free Software
+  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
+  */
+-
++#include <va/va_x11.h>
++#undef Status
+ #include <stdarg.h>
+ #include "windef.h"
+ #include "winbase.h"
+@@ -45,14 +46,6 @@ BOOL va_initialized = FALSE;
+ Display *x11_display;
+ VADisplay va_display;
+ 
+-struct dxva2_profiles
+-{
+-    const int profile;
+-    const int entryPoint;
+-    const GUID* guid;
+-    BOOL supported;
+-};
+-
+ struct dxva2_profiles profile_table[] =
+ {
+     /* MPEG2 */
+@@ -68,14 +61,6 @@ struct dxva2_profiles profile_table[] =
+     /* TODO: MPEG4, H264, ... */
+ };
+ 
+-struct dxva2_formats
+-{
+-    const D3DFORMAT d3dformat;
+-    const unsigned int vafourcc;
+-    const unsigned int vaformat;
+-    const BOOL fallback;
+-};
+-
+ const struct dxva2_formats format_table[] =
+ {
+     {MAKEFOURCC('N','V','1','1'), VA_FOURCC_NV11, VA_RT_FORMAT_YUV420, FALSE},
+@@ -116,7 +101,7 @@ void dxva2_mutex_unlock( void )
+     LeaveCriticalSection(&dxva2_cs);
+ }
+ 
+-static struct dxva2_profiles *dxva2_lookup_vaprofile( int profile, int entryPoint )
++struct dxva2_profiles *dxva2_lookup_vaprofile( int profile, int entryPoint )
+ {
+     int i;
+     for (i = 0; i < sizeof(profile_table)/sizeof(profile_table[0]); i++)
+@@ -127,7 +112,7 @@ static struct dxva2_profiles *dxva2_lookup_vaprofile( int profile, int entryPoin
+     return NULL;
+ }
+ 
+-static struct dxva2_profiles *dxva2_lookup_guid( const GUID *guid )
++struct dxva2_profiles *dxva2_lookup_guid( const GUID *guid )
+ {
+     int i;
+     for (i = 0; i < sizeof(profile_table)/sizeof(profile_table[0]); i++)
+@@ -138,6 +123,17 @@ static struct dxva2_profiles *dxva2_lookup_guid( const GUID *guid )
+     return NULL;
+ }
+ 
++const struct dxva2_formats *dxva2_lookup_d3dformat( D3DFORMAT d3dformat )
++{
++    int i;
++    for (i = 0; i < sizeof(format_table)/sizeof(format_table[0]); i++)
++    {
++        if (format_table[i].d3dformat == d3dformat)
++            return &format_table[i];
++    }
++    return NULL;
++}
++
+ static BOOL is_h264_codec( REFGUID guid )
+ {
+     if (IsEqualGUID(guid, &DXVA2_ModeH264_A))
+@@ -223,13 +219,16 @@ static BOOL dxva2_is_format_supported( const struct dxva2_profiles *profile, con
+     status = vaQuerySurfaceAttributes( va_display, config, NULL, &numSurfaceAttribs );
+ 
+     if (status == VA_STATUS_ERROR_UNIMPLEMENTED || status == VA_STATUS_ERROR_INVALID_PARAMETER)
+-        return format->fallback;
++    {
++        result = format->fallback;
++        goto err;
++    }
+     if (status != VA_STATUS_SUCCESS || numSurfaceAttribs == 0)
+-        return FALSE;
++        goto err;
+ 
+     surfaceAttribs = HeapAlloc( GetProcessHeap(), 0, sizeof(VASurfaceAttrib) * numSurfaceAttribs );
+     if (!surfaceAttribs)
+-        return FALSE;
++        goto err;
+ 
+     if (vaQuerySurfaceAttributes( va_display, config, surfaceAttribs, &numSurfaceAttribs ) != VA_STATUS_SUCCESS)
+         goto err;
+@@ -244,6 +243,7 @@ static BOOL dxva2_is_format_supported( const struct dxva2_profiles *profile, con
+     }
+ 
+ err:
++    vaDestroyConfig( va_display, config );
+     HeapFree( GetProcessHeap(), 0, surfaceAttribs );
+     return result;
+ }
+@@ -330,19 +330,17 @@ static HRESULT WINAPI DirectXVideoAccelerationService_CreateSurface( IDirectXVid
+     FIXME("(%p)->(%u, %u, %u, %#x, 0x%x, 0x%x, 0x%x, %p, %p): semi-stub\n",
+         This, width, height, backBuffers, format, pool, usage, dxvaType, ppSurface, pSharedHandle );
+ 
+-    hr = IDirect3DDevice9_CreateRenderTarget( This->device, width, height, format, D3DMULTISAMPLE_NONE, 0, TRUE, &ppSurface[0], pSharedHandle );
+-    if (FAILED(hr)) return hr;
+-
+-    for (i = 0; i < backBuffers; i++)
++    /* We create only backbuffers as the front buffer usually does not support this format */
++    for (i = 0; i < backBuffers + 1; i++)
+     {
+-        hr = IDirect3DDevice9_CreateOffscreenPlainSurface( This->device, width, height, format, pool, &ppSurface[i + 1], pSharedHandle );
++        hr = IDirect3DDevice9_CreateOffscreenPlainSurface( This->device, width, height, format, pool, &ppSurface[i], pSharedHandle );
+         if (FAILED(hr)) goto err;
+     }
+ 
+     return S_OK;
+ 
+ err:
+-    while (i-- >= 0)
++    while (--i >= 0)
+         IDirect3DSurface9_Release( ppSurface[i] );
+     return hr;
+ }
+@@ -404,6 +402,12 @@ static HRESULT WINAPI DirectXVideoDecoderService_CreateVideoDecoder( IDirectXVid
+     FIXME("(%p/%p)->(%s, %p, %p, %p, %u, %p): stub\n",
+         iface, This, debugstr_guid(guid), pVideoDesc, pConfig, ppDecoderRenderTargets, NumSurfaces, ppDecode);
+ 
++    if ( !guid || !pVideoDesc || !pConfig || !ppDecoderRenderTargets || !NumSurfaces || !ppDecode )
++        return E_INVALIDARG;
++
++    if ( IsEqualGUID(guid, &DXVA2_ModeMPEG2_VLD) )
++        return mpeg2decoder_create( iface, pVideoDesc, pConfig, ppDecoderRenderTargets, NumSurfaces, ppDecode  );
++
+     return E_NOTIMPL;
+ }
+ 
+@@ -429,7 +433,7 @@ static HRESULT WINAPI DirectXVideoDecoderService_GetDecoderConfigurations( IDire
+     memcpy(&config->guidConfigMBcontrolEncryption, &DXVA_NoEncrypt, sizeof(GUID));
+     memcpy(&config->guidConfigResidDiffEncryption, &DXVA_NoEncrypt, sizeof(GUID));
+ 
+-    config->ConfigBitstreamRaw             = is_h264_codec(guid) ? 1 : 0;
++    config->ConfigBitstreamRaw             = 1;
+     config->ConfigMBcontrolRasterOrder     = is_h264_codec(guid) ? 0 : 1;
+     config->ConfigResidDiffHost            = 0;
+     config->ConfigSpatialResid8            = 0;
+@@ -441,7 +445,7 @@ static HRESULT WINAPI DirectXVideoDecoderService_GetDecoderConfigurations( IDire
+     config->ConfigHostInverseScan          = 1;
+     config->ConfigSpecificIDCT             = 0;
+     config->Config4GroupedCoefs            = 0;
+-    config->ConfigMinRenderTargetBuffCount = 1;
++    config->ConfigMinRenderTargetBuffCount = 3;
+     config->ConfigDecoderSpecific          = 0;
+ 
+     *pCount    = 1;
+diff --git a/include/Makefile.in b/include/Makefile.in
+index da8e75d..22a1090 100644
+--- a/include/Makefile.in
++++ b/include/Makefile.in
+@@ -304,6 +304,7 @@ SRCDIR_INCLUDES = \
+ 	dxfile.h \
+ 	dxgiformat.h \
+ 	dxgitype.h \
++	dxva.h \
+ 	dyngraph.idl \
+ 	errorrep.h \
+ 	errors.h \
+diff --git a/include/dxva.h b/include/dxva.h
+new file mode 100644
+index 0000000..2b17fbf
+--- /dev/null
++++ b/include/dxva.h
+@@ -0,0 +1,96 @@
++/*
++ * Copyright Michael Müller for Pipelight
++ *
++ * This library is free software; you can redistribute it and/or
++ * modify it under the terms of the GNU Lesser General Public
++ * License as published by the Free Software Foundation; either
++ * version 2.1 of the License, or (at your option) any later version.
++ *
++ * This library is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++ * Lesser General Public License for more details.
++ *
++ * You should have received a copy of the GNU Lesser General Public
++ * License along with this library; if not, write to the Free Software
++ * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
++ */
++
++#ifndef __DXVA_H
++#define __DXVA_H
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++#define DXVA_USUAL_BLOCK_WIDTH   8
++#define DXVA_USUAL_BLOCK_HEIGHT  8
++#define DXVA_USUAL_BLOCK_SIZE   (DXVA_USUAL_BLOCK_WIDTH * DXVA_USUAL_BLOCK_HEIGHT)
++
++#pragma pack(push, 1)
++
++typedef struct _DXVA_PictureParameters
++{
++  WORD wDecodedPictureIndex;
++  WORD wDeblockedPictureIndex;
++  WORD wForwardRefPictureIndex;
++  WORD wBackwardRefPictureIndex;
++  WORD wPicWidthInMBminus1;
++  WORD wPicHeightInMBminus1;
++  BYTE bMacroblockWidthMinus1;
++  BYTE bMacroblockHeightMinus1;
++  BYTE bBlockWidthMinus1;
++  BYTE bBlockHeightMinus1;
++  BYTE bBPPminus1;
++  BYTE bPicStructure;
++  BYTE bSecondField;
++  BYTE bPicIntra;
++  BYTE bPicBackwardPrediction;
++  BYTE bBidirectionalAveragingMode;
++  BYTE bMVprecisionAndChromaRelation;
++  BYTE bChromaFormat;
++  BYTE bPicScanFixed;
++  BYTE bPicScanMethod;
++  BYTE bPicReadbackRequests;
++  BYTE bRcontrol;
++  BYTE bPicSpatialResid8;
++  BYTE bPicOverflowBlocks;
++  BYTE bPicExtrapolation;
++  BYTE bPicDeblocked;
++  BYTE bPicDeblockConfined;
++  BYTE bPic4MVallowed;
++  BYTE bPicOBMC;
++  BYTE bPicBinPB;
++  BYTE bMV_RPS;
++  BYTE bReservedBits;
++  WORD wBitstreamFcodes;
++  WORD wBitstreamPCEelements;
++  BYTE bBitstreamConcealmentNeed;
++  BYTE bBitstreamConcealmentMethod;
++} DXVA_PictureParameters, *LPDXVA_PictureParameters;
++
++typedef struct _DXVA_SliceInfo {
++  WORD  wHorizontalPosition;
++  WORD  wVerticalPosition;
++  DWORD dwSliceBitsInBuffer;
++  DWORD dwSliceDataLocation;
++  BYTE  bStartCodeBitOffset;
++  BYTE  bReservedBits;
++  WORD  wMBbitOffset;
++  WORD  wNumberMBsInSlice;
++  WORD  wQuantizerScaleCode;
++  WORD  wBadSliceChopping;
++} DXVA_SliceInfo, *LPDXVA_SliceInfo;
++
++typedef struct _DXVA_QmatrixData {
++  BYTE bNewQmatrix[4];
++  WORD Qmatrix[4][DXVA_USUAL_BLOCK_WIDTH * DXVA_USUAL_BLOCK_HEIGHT];
++} DXVA_QmatrixData, *LPDXVA_QmatrixData;
++
++#pragma pack(pop)
++
++#ifdef __cplusplus
++}
++#endif
++
++#endif /* __DXVA_H */
+diff --git a/include/dxva2api.idl b/include/dxva2api.idl
+index 57c5d5a..bfb17c8 100644
+--- a/include/dxva2api.idl
++++ b/include/dxva2api.idl
+@@ -70,6 +70,16 @@ cpp_quote("#define DXVA2_ModeH264_IDCT_FGT     DXVA2_ModeH264_D")
+ cpp_quote("#define DXVA2_ModeH264_VLD_NoFGT    DXVA2_ModeH264_E")
+ cpp_quote("#define DXVA2_ModeH264_VLD_FGT      DXVA2_ModeH264_F")
+ 
++cpp_quote("#define DXVA2_PictureParametersBufferType 0")
++cpp_quote("#define DXVA2_MacroBlockControlBufferType 1")
++cpp_quote("#define DXVA2_ResidualDifferenceBufferType 2")
++cpp_quote("#define DXVA2_DeblockingControlBufferType 3")
++cpp_quote("#define DXVA2_InverseQuantizationMatrixBufferType 4")
++cpp_quote("#define DXVA2_SliceControlBufferType 5")
++cpp_quote("#define DXVA2_BitStreamDateBufferType 6")
++cpp_quote("#define DXVA2_MotionVectorBuffer 7")
++cpp_quote("#define DXVA2_FilmGrainBuffer 8")
++
+ typedef LONGLONG REFERENCE_TIME;
+ 
+ enum
+-- 
+1.8.3.2
+

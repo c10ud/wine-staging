@@ -1,0 +1,136 @@
+From c4fe8693e7be526ca4f2f9a97b7336e7089591db Mon Sep 17 00:00:00 2001
+From: Sebastian Lackner <sebastian@fds-team.de>
+Date: Sat, 29 Mar 2014 20:11:29 +0100
+Subject: dxva2: Improve stubs of Direct3DDeviceManager9 interface
+
+---
+ dlls/dxva2/devicemanager.c | 46 +++++++++++++++++++++++++++++++++-------------
+ 1 file changed, 33 insertions(+), 13 deletions(-)
+
+diff --git a/dlls/dxva2/devicemanager.c b/dlls/dxva2/devicemanager.c
+index 26ad45d..da37eb8 100644
+--- a/dlls/dxva2/devicemanager.c
++++ b/dlls/dxva2/devicemanager.c
+@@ -35,6 +35,8 @@ typedef struct
+ {
+     IDirect3DDeviceManager9 IDirect3DDeviceManager9_iface;
+     LONG refCount;
++    UINT token;
++    IDirect3DDevice9 *device;
+ } Direct3DDeviceManager9Impl;
+ 
+ static inline Direct3DDeviceManager9Impl *impl_from_Direct3DDeviceManager9( IDirect3DDeviceManager9 *iface )
+@@ -86,6 +88,10 @@ static ULONG WINAPI Direct3DDeviceManager9_Release( IDirect3DDeviceManager9 *ifa
+     if (!refCount)
+     {
+         TRACE("Destroying\n");
++
++        if (This->device)
++            IDirect3DDevice9_Release(This->device);
++
+         CoTaskMemFree(This);
+     }
+ 
+@@ -96,18 +102,30 @@ static HRESULT WINAPI Direct3DDeviceManager9_ResetDevice( IDirect3DDeviceManager
+ {
+     Direct3DDeviceManager9Impl *This = impl_from_Direct3DDeviceManager9(iface);
+ 
+-    FIXME("(%p)->(%p, %u): stub\n", This, pDevice, resetToken);
++    FIXME("(%p)->(%p, %u): semi-stub\n", This, pDevice, resetToken);
++
++    if (This->device)
++        return E_FAIL;
++
++    if (resetToken != This->token)
++        return E_INVALIDARG;
++
++    This->device = pDevice;
++    IDirect3DDevice9_AddRef(This->device);
++
++    /* TODO: Reset the device, verify token ... */
+ 
+-    return E_NOTIMPL;
++    return S_OK;
+ }
+ 
+ static HRESULT WINAPI Direct3DDeviceManager9_OpenDeviceHandle( IDirect3DDeviceManager9 *iface, HANDLE *phDevice )
+ {
+     Direct3DDeviceManager9Impl *This = impl_from_Direct3DDeviceManager9(iface);
+ 
+-    FIXME("(%p)->(%p): stub\n", This, phDevice);
++    FIXME("(%p)->(%p): semi-stub\n", This, phDevice);
+ 
+-    return E_NOTIMPL;
++    *phDevice = (HANDLE)This->device;
++    return S_OK;
+ }
+ 
+ static HRESULT WINAPI Direct3DDeviceManager9_CloseDeviceHandle( IDirect3DDeviceManager9 *iface, HANDLE hDevice )
+@@ -116,7 +134,7 @@ static HRESULT WINAPI Direct3DDeviceManager9_CloseDeviceHandle( IDirect3DDeviceM
+ 
+     FIXME("(%p)->(%p): stub\n", This, hDevice);
+ 
+-    return E_NOTIMPL;
++    return S_OK;
+ }
+ 
+ static HRESULT WINAPI Direct3DDeviceManager9_TestDevice( IDirect3DDeviceManager9 *iface, HANDLE hDevice )
+@@ -125,16 +143,17 @@ static HRESULT WINAPI Direct3DDeviceManager9_TestDevice( IDirect3DDeviceManager9
+ 
+     FIXME("(%p)->(%p): stub\n", This, hDevice);
+ 
+-    return E_NOTIMPL;
++    return S_OK;
+ }
+ 
+ static HRESULT WINAPI Direct3DDeviceManager9_LockDevice( IDirect3DDeviceManager9 *iface, HANDLE hDevice, IDirect3DDevice9 **ppDevice, BOOL fBlock )
+ {
+     Direct3DDeviceManager9Impl *This = impl_from_Direct3DDeviceManager9(iface);
+ 
+-    FIXME("(%p)->(%p, %p, %d): stub\n", This, hDevice, ppDevice, fBlock);
++    FIXME("(%p)->(%p, %p, %d): semi-stub\n", This, hDevice, ppDevice, fBlock);
+ 
+-    return E_NOTIMPL;
++    *ppDevice = (IDirect3DDevice9 *)hDevice;
++    return S_OK;
+ }
+ 
+ static HRESULT WINAPI Direct3DDeviceManager9_UnlockDevice( IDirect3DDeviceManager9 *iface, HANDLE hDevice, BOOL fSaveState )
+@@ -143,16 +162,16 @@ static HRESULT WINAPI Direct3DDeviceManager9_UnlockDevice( IDirect3DDeviceManage
+ 
+     FIXME("(%p)->(%p, %d): stub\n", This, hDevice, fSaveState);
+ 
+-    return E_NOTIMPL;
++    return S_OK;
+ }
+ 
+ static HRESULT WINAPI Direct3DDeviceManager9_GetVideoService( IDirect3DDeviceManager9 *iface, HANDLE hDevice, REFIID riid, void **ppService )
+ {
+     Direct3DDeviceManager9Impl *This = impl_from_Direct3DDeviceManager9(iface);
+ 
+-    FIXME("(%p)->(%p, %p, %p): stub\n", This, hDevice, riid, ppService);
++    FIXME("(%p)->(%p, %p, %p): semi-stub\n", This, hDevice, riid, ppService);
+ 
+-    return E_NOTIMPL;
++    return videoservice_create( (IDirect3DDevice9 *)hDevice, riid, ppService );
+ }
+ 
+ static const IDirect3DDeviceManager9Vtbl Direct3DDeviceManager9_VTable =
+@@ -184,10 +203,11 @@ HRESULT devicemanager_create( UINT *resetToken, void **ppv )
+ 
+     devicemanager->IDirect3DDeviceManager9_iface.lpVtbl = &Direct3DDeviceManager9_VTable;
+     devicemanager->refCount = 1;
++    devicemanager->token = 0xdeadbeef; /* FIXME; provide some better value? */
++    devicemanager->device = NULL;
+     *ppv = devicemanager;
+ 
+-    /* FIXME; provide some better value? */
+-    *resetToken = 0xdeadbeef;
++    *resetToken = devicemanager->token;
+ 
+     return S_OK;
+ }
+\ No newline at end of file
+-- 
+1.8.3.2
+
