@@ -1,0 +1,86 @@
+From 8dc58ca994c2d8135b32dd50e0dd7424df1d7742 Mon Sep 17 00:00:00 2001
+From: "Erich E. Hoover" <erich.e.hoover@gmail.com>
+Date: Mon, 4 Aug 2014 05:23:00 +0200
+Subject: server: Store the message read-mode for a pipe in the file
+ descriptor and use it for determining read behavior.
+
+---
+ dlls/kernel32/tests/pipe.c |   14 ++++----------
+ dlls/ntdll/file.c          |    2 +-
+ server/named_pipe.c        |    8 ++++++++
+ 3 files changed, 13 insertions(+), 11 deletions(-)
+
+diff --git a/dlls/kernel32/tests/pipe.c b/dlls/kernel32/tests/pipe.c
+index ea83760..b7a753c 100644
+--- a/dlls/kernel32/tests/pipe.c
++++ b/dlls/kernel32/tests/pipe.c
+@@ -397,9 +397,7 @@ static void test_CreateNamedPipe(int pipemode)
+             ok(readden == sizeof(obuf) + sizeof(obuf2), "read 4 got %d bytes\n", readden);
+         }
+         else {
+-            todo_wine {
+-                ok(readden == sizeof(obuf), "read 4 got %d bytes\n", readden);
+-            }
++            ok(readden == sizeof(obuf), "read 4 got %d bytes\n", readden);
+         }
+         pbuf = ibuf;
+         ok(memcmp(obuf, pbuf, sizeof(obuf)) == 0, "content 4a check\n");
+@@ -555,10 +553,8 @@ static void test_CreateNamedPipe(int pipemode)
+             /* Multiple writes in the reverse direction */
+             /* the write of obuf2 from write4 should still be in the buffer */
+             ok(PeekNamedPipe(hnp, ibuf, sizeof(ibuf), &readden, &avail, NULL), "Peek6a\n");
+-            todo_wine {
+-                ok(readden == sizeof(obuf2), "peek6a got %d bytes\n", readden);
+-                ok(avail == sizeof(obuf2), "peek6a got %d bytes available\n", avail);
+-            }
++            ok(readden == sizeof(obuf2), "peek6a got %d bytes\n", readden);
++            ok(avail == sizeof(obuf2), "peek6a got %d bytes available\n", avail);
+             if (avail > 0) {
+                 ok(ReadFile(hnp, ibuf, sizeof(ibuf), &readden, NULL), "ReadFile\n");
+                 ok(readden == sizeof(obuf2), "read 6a got %d bytes\n", readden);
+@@ -576,9 +572,7 @@ static void test_CreateNamedPipe(int pipemode)
+             pbuf = ibuf;
+             ok(memcmp(obuf, pbuf, sizeof(obuf)) == 0, "content 6a check\n");
+             ok(ReadFile(hnp, ibuf, sizeof(ibuf), &readden, NULL), "ReadFile\n");
+-            todo_wine {
+-                ok(readden == sizeof(obuf), "read 6b got %d bytes\n", readden);
+-            }
++            ok(readden == sizeof(obuf), "read 6b got %d bytes\n", readden);
+             pbuf = ibuf;
+             ok(memcmp(obuf, pbuf, sizeof(obuf)) == 0, "content 6a check\n");
+         }
+diff --git a/dlls/ntdll/file.c b/dlls/ntdll/file.c
+index d1dff7f..38273fc 100644
+--- a/dlls/ntdll/file.c
++++ b/dlls/ntdll/file.c
+@@ -720,7 +720,7 @@ NTSTATUS WINAPI NtReadFile(HANDLE hFile, HANDLE hEvent,
+                 }
+             }
+             else if (type == FD_TYPE_FILE) continue;  /* no async I/O on regular files */
+-            else if (message_mode) continue;          /* concatenate with next message */
++            else if (message_mode && !(fcntl( unix_handle, F_GETSIG ) & 0x01)) continue;
+         }
+         else if (errno != EAGAIN)
+         {
+diff --git a/server/named_pipe.c b/server/named_pipe.c
+index 9fb79d5..dd54d96 100644
+--- a/server/named_pipe.c
++++ b/server/named_pipe.c
+@@ -878,6 +878,14 @@ static struct object *named_pipe_open_file( struct object *obj, unsigned int acc
+             if (type != SOCK_SEQPACKET || (setsockopt( fds[0], SOL_SOCKET, SO_PEEK_OFF, &zero, sizeof(zero) ) != -1 &&
+                                            setsockopt( fds[1], SOL_SOCKET, SO_PEEK_OFF, &zero, sizeof(zero) ) != -1))
+             {
++
++                if (type == SOCK_SEQPACKET)
++                {
++                    /* server side is by default in message read mode, client in byte read mode. */
++                    fcntl( fds[0], F_SETSIG, (pipe->flags & NAMED_PIPE_MESSAGE_STREAM_READ) ? 0x01 : 0x00 );
++                    fcntl( fds[1], F_SETSIG, 0x00 );
++                }
++
+                 client->fd = create_anonymous_fd( &pipe_client_fd_ops, fds[1], &client->obj, options );
+                 server->fd = create_anonymous_fd( &pipe_server_fd_ops, fds[0], &server->obj, server->options );
+                 if (client->fd && server->fd)
+-- 
+1.7.9.5
+

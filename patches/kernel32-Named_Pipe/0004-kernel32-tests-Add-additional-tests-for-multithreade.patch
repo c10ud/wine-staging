@@ -1,0 +1,151 @@
+From dbe179fb6e78d9ef4cf42648b2ad0cc56b416f23 Mon Sep 17 00:00:00 2001
+From: Sebastian Lackner <sebastian@fds-team.de>
+Date: Wed, 30 Jul 2014 22:55:13 +0200
+Subject: kernel32/tests: Add additional tests for multithreaded partial reads
+ from named pipes.
+
+This set of tests confirms, that when doing a partial read, the remaining part is
+still in the pipe, and can be received for example from a second thread. This means
+that Windows developers have to be careful when reading on the same named pipe from
+multiple threads, where thread 1 could read the first part, and thread 2 returns the
+second part of a single message. A separate test (not part of this patch) shows that
+this even works accross multiple processes.
+---
+ dlls/kernel32/tests/pipe.c |  114 ++++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 114 insertions(+)
+
+diff --git a/dlls/kernel32/tests/pipe.c b/dlls/kernel32/tests/pipe.c
+index 3357061..242e059 100644
+--- a/dlls/kernel32/tests/pipe.c
++++ b/dlls/kernel32/tests/pipe.c
+@@ -43,6 +43,72 @@ static void CALLBACK user_apc(ULONG_PTR param)
+     user_apc_ran = TRUE;
+ }
+ 
++
++enum rpcThreadOp
++{
++    RPC_READFILE
++};
++
++struct rpcThreadArgs
++{
++    PVOID returnValue;
++    DWORD lastError;
++    enum rpcThreadOp op;
++    PVOID args[5];
++};
++
++static DWORD CALLBACK rpcThreadMain(LPVOID arg)
++{
++    struct rpcThreadArgs *rpcargs = (struct rpcThreadArgs *)arg;
++    trace("rpcThreadMain starting\n");
++    SetLastError( rpcargs->lastError );
++
++    switch (rpcargs->op)
++    {
++        case RPC_READFILE:
++            rpcargs->returnValue = (PVOID)ReadFile( (HANDLE)rpcargs->args[0],         /* hFile */
++                                                    (LPVOID)rpcargs->args[1],         /* buffer */
++                                                    (DWORD)rpcargs->args[2],          /* bytesToRead */
++                                                    (LPDWORD)rpcargs->args[3],        /* bytesRead */
++                                                    (LPOVERLAPPED)rpcargs->args[4] ); /* overlapped */
++            break;
++
++        default:
++            SetLastError( ERROR_CALL_NOT_IMPLEMENTED );
++            rpcargs->returnValue = NULL;
++            break;
++    }
++
++    rpcargs->lastError = GetLastError();
++    trace("rpcThreadMain returning\n");
++    return 0;
++}
++
++/* Runs ReadFile(...) from a different thread */
++static BOOL RpcReadFile(HANDLE hFile, LPVOID buffer, DWORD bytesToRead, LPDWORD bytesRead, LPOVERLAPPED overlapped)
++{
++    struct rpcThreadArgs rpcargs;
++    HANDLE thread;
++    DWORD threadId;
++
++    rpcargs.returnValue = NULL;
++    rpcargs.lastError = GetLastError();
++    rpcargs.op = RPC_READFILE;
++    rpcargs.args[0] = (PVOID)hFile;
++    rpcargs.args[1] = (PVOID)buffer;
++    rpcargs.args[2] = (PVOID)bytesToRead;
++    rpcargs.args[3] = (PVOID)bytesRead;
++    rpcargs.args[4] = (PVOID)overlapped;
++
++    thread = CreateThread(NULL, 0, rpcThreadMain, (void *)&rpcargs, 0, &threadId);
++    ok(thread != NULL, "CreateThread failed. %d\n", GetLastError());
++    ok(WaitForSingleObject(thread, INFINITE) == WAIT_OBJECT_0,"WaitForSingleObject failed with %d.\n", GetLastError());
++    CloseHandle(thread);
++
++    SetLastError(rpcargs.lastError);
++    return (BOOL)rpcargs.returnValue;
++}
++
+ static void test_CreateNamedPipe(int pipemode)
+ {
+     HANDLE hnp;
+@@ -323,6 +389,54 @@ static void test_CreateNamedPipe(int pipemode)
+             ok(readden == sizeof(obuf2)-4, "read got %d bytes\n", readden);
+             ok(memcmp(obuf2, ibuf, written) == 0, "content check\n");
+ 
++            /* The following test shows that when doing a partial read of a message, the rest
++             * is still in the pipe, and can be received from a second thread. This shows
++             * especially that the content is _not_ stored in thread-local-storage until it is
++             * completely transmitted. The same method works even across multiple processes. */
++            memset(ibuf, 0, sizeof(ibuf));
++            ok(WriteFile(hnp, obuf, sizeof(obuf), &written, NULL), "WriteFile\n");
++            ok(written == sizeof(obuf), "write file len\n");
++            ok(WriteFile(hnp, obuf2, sizeof(obuf2), &written, NULL), "WriteFile\n");
++            ok(written == sizeof(obuf2), "write file len\n");
++            SetLastError(0xdeadbeef);
++            todo_wine
++            ok(!ReadFile(hFile, ibuf, 4, &readden, NULL), "ReadFile\n");
++            todo_wine
++            ok(GetLastError() == ERROR_MORE_DATA, "wrong error\n");
++            ok(readden == 4, "read got %d bytes\n", readden);
++            SetLastError(0xdeadbeef);
++            ret = RpcReadFile(hFile, ibuf + 4, 4, &readden, NULL);
++            todo_wine
++            ok(!ret, "RpcReadFile\n");
++            todo_wine
++            ok(GetLastError() == ERROR_MORE_DATA, "wrong error\n");
++            ok(readden == 4, "read got %d bytes\n", readden);
++            ret = RpcReadFile(hFile, ibuf + 8, sizeof(ibuf), &readden, NULL);
++            ok(ret, "RpcReadFile\n");
++            todo_wine
++            ok(readden == sizeof(obuf)-8, "read got %d bytes\n", readden);
++            ok(memcmp(obuf, ibuf, sizeof(obuf)) == 0, "content check\n");
++            if (readden <= sizeof(obuf)-8) /* blocks forever if second part was already received */
++            {
++                memset(ibuf, 0, sizeof(ibuf));
++                SetLastError(0xdeadbeef);
++                ret = RpcReadFile(hFile, ibuf, 4, &readden, NULL);
++                ok(!ret, "RpcReadFile\n");
++                todo_wine
++                ok(GetLastError() == ERROR_MORE_DATA, "wrong error\n");
++                ok(readden == 4, "read got %d bytes\n", readden);
++                SetLastError(0xdeadbeef);
++                todo_wine
++                ok(!ReadFile(hFile, ibuf + 4, 4, &readden, NULL), "ReadFile\n");
++                todo_wine
++                ok(GetLastError() == ERROR_MORE_DATA, "wrong error\n");
++                ok(readden == 4, "read got %d bytes\n", readden);
++                ret = RpcReadFile(hFile, ibuf + 8, sizeof(ibuf), &readden, NULL);
++                ok(ret, "RpcReadFile\n");
++                ok(readden == sizeof(obuf2)-8, "read got %d bytes\n", readden);
++                ok(memcmp(obuf2, ibuf, sizeof(obuf2)) == 0, "content check\n");
++            }
++
+             memset(ibuf, 0, sizeof(ibuf));
+             ok(WriteFile(hnp, obuf, sizeof(obuf), &written, NULL), "WriteFile5a\n");
+             ok(written == sizeof(obuf), "write file len 3a\n");
+-- 
+1.7.9.5
+

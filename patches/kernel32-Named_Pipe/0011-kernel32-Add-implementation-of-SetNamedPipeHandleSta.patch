@@ -1,0 +1,156 @@
+From 62d2b6b7fb93dd6ae67749633204f9ef29c59195 Mon Sep 17 00:00:00 2001
+From: "Erich E. Hoover" <erich.e.hoover@gmail.com>
+Date: Mon, 4 Aug 2014 06:00:21 +0200
+Subject: kernel32: Add implementation of SetNamedPipeHandleState.
+
+---
+ dlls/kernel32/sync.c       |   43 +++++++++++++++++++++++++++++++++++--------
+ dlls/kernel32/tests/pipe.c |   14 +++-----------
+ 2 files changed, 38 insertions(+), 19 deletions(-)
+
+diff --git a/dlls/kernel32/sync.c b/dlls/kernel32/sync.c
+index f9b3903..ffbc097 100644
+--- a/dlls/kernel32/sync.c
++++ b/dlls/kernel32/sync.c
+@@ -28,6 +28,9 @@
+ #include <errno.h>
+ #include <stdarg.h>
+ #include <stdio.h>
++#ifdef HAVE_SYS_SOCKET_H
++# include <sys/socket.h>
++#endif
+ 
+ #define NONAMELESSUNION
+ #define NONAMELESSSTRUCT
+@@ -1743,11 +1746,38 @@ BOOL WINAPI SetNamedPipeHandleState(
+     HANDLE hNamedPipe, LPDWORD lpMode, LPDWORD lpMaxCollectionCount,
+     LPDWORD lpCollectDataTimeout)
+ {
+-    /* should be a fixme, but this function is called a lot by the RPC
+-     * runtime, and it slows down InstallShield a fair bit. */
+-    WARN("stub: %p %p/%d %p %p\n",
++    NTSTATUS status;
++    int fd;
++
++    TRACE("%p %p/%d %p %p\n",
+           hNamedPipe, lpMode, lpMode ? *lpMode : 0, lpMaxCollectionCount, lpCollectDataTimeout);
+-    return FALSE;
++
++    status = wine_server_handle_to_fd( hNamedPipe, GENERIC_READ | FILE_WRITE_ATTRIBUTES, &fd, NULL );
++    if (status == STATUS_SUCCESS)
++    {
++
++        if (lpMode)
++        {
++            int sock_type = 0;
++            socklen_t sock_opt_len = sizeof(sock_type);
++            if (!getsockopt( fd, SOL_SOCKET, SO_TYPE, &sock_type, &sock_opt_len ) &&
++                    sock_type == SOCK_SEQPACKET)
++            {
++                if (fcntl( fd, F_SETSIG, (*lpMode & PIPE_READMODE_MESSAGE) ? 0x01 : 0x00 ) == -1)
++                    status = STATUS_ACCESS_VIOLATION;
++            }
++            else if (*lpMode & PIPE_READMODE_MESSAGE)
++                status = STATUS_INVALID_PARAMETER;
++
++            if (*lpMode & PIPE_NOWAIT)
++                FIXME("PIPE_NOWAIT is not currently supported.\n");
++        }
++
++        wine_server_release_fd( hNamedPipe, fd );
++    }
++
++    if (status != STATUS_SUCCESS) SetLastError( RtlNtStatusToDosError(status) );
++    return !status;
+ }
+ 
+ /***********************************************************************
+@@ -1810,14 +1840,11 @@ BOOL WINAPI CallNamedPipeW(
+     mode = PIPE_READMODE_MESSAGE;
+     ret = SetNamedPipeHandleState(pipe, &mode, NULL, NULL);
+ 
+-    /* Currently SetNamedPipeHandleState() is a stub returning FALSE */
+-    if (ret) FIXME("Now that SetNamedPipeHandleState() is more than a stub, please update CallNamedPipeW\n");
+-    /*
+     if (!ret)
+     {
+         CloseHandle(pipe);
+         return FALSE;
+-    }*/
++    }
+ 
+     ret = TransactNamedPipe(pipe, lpInput, lpInputSize, lpOutput, lpOutputSize, lpBytesRead, NULL);
+     CloseHandle(pipe);
+diff --git a/dlls/kernel32/tests/pipe.c b/dlls/kernel32/tests/pipe.c
+index b7a753c..b9ea38b 100644
+--- a/dlls/kernel32/tests/pipe.c
++++ b/dlls/kernel32/tests/pipe.c
+@@ -414,9 +414,7 @@ static void test_CreateNamedPipe(int pipemode)
+             ok(!SetNamedPipeHandleState(hFile, &lpmode, NULL, NULL), "Change mode\n");
+         }
+         else {
+-            todo_wine {
+-                ok(SetNamedPipeHandleState(hFile, &lpmode, NULL, NULL), "Change mode\n");
+-            }
++            ok(SetNamedPipeHandleState(hFile, &lpmode, NULL, NULL), "Change mode\n");
+ 
+             /* Test how ReadFile behaves when the buffer is not big enough for the whole message */
+             memset(ibuf, 0, sizeof(ibuf));
+@@ -485,7 +483,6 @@ static void test_CreateNamedPipe(int pipemode)
+             ok(leftmsg == sizeof(obuf) - 8, "peek got %d bytes left in message\n", leftmsg);
+             ret = RpcReadFile(hFile, ibuf + 8, sizeof(ibuf), &readden, NULL);
+             ok(ret, "RpcReadFile\n");
+-            todo_wine
+             ok(readden == sizeof(obuf)-8, "read got %d bytes\n", readden);
+             ok(memcmp(obuf, ibuf, sizeof(obuf)) == 0, "content check\n");
+             if (readden <= sizeof(obuf)-8) /* blocks forever if second part was already received */
+@@ -501,6 +498,7 @@ static void test_CreateNamedPipe(int pipemode)
+                 ok(leftmsg == sizeof(obuf2), "peek got %d bytes left in message\n", leftmsg);
+                 SetLastError(0xdeadbeef);
+                 ret = RpcReadFile(hFile, ibuf, 4, &readden, NULL);
++                todo_wine
+                 ok(!ret, "RpcReadFile\n");
+                 todo_wine
+                 ok(GetLastError() == ERROR_MORE_DATA, "wrong error\n");
+@@ -544,9 +542,7 @@ static void test_CreateNamedPipe(int pipemode)
+             pbuf = ibuf;
+             ok(memcmp(obuf, pbuf, sizeof(obuf)) == 0, "content 5a check\n");
+             ok(ReadFile(hFile, ibuf, sizeof(ibuf), &readden, NULL), "ReadFile\n");
+-            todo_wine {
+-                ok(readden == sizeof(obuf), "read 5 got %d bytes\n", readden);
+-            }
++            ok(readden == sizeof(obuf), "read 5 got %d bytes\n", readden);
+             pbuf = ibuf;
+             ok(memcmp(obuf, pbuf, sizeof(obuf)) == 0, "content 5a check\n");
+     
+@@ -2186,13 +2182,11 @@ static void test_NamedPipeHandleState(void)
+ 
+     state = PIPE_READMODE_BYTE;
+     ret = SetNamedPipeHandleState(client, &state, NULL, NULL);
+-    todo_wine
+     ok(ret, "SetNamedPipeHandleState failed: %d\n", GetLastError());
+     /* A byte-mode pipe client can't be changed to message mode, either. */
+     state = PIPE_READMODE_MESSAGE;
+     SetLastError(0xdeadbeef);
+     ret = SetNamedPipeHandleState(server, &state, NULL, NULL);
+-    todo_wine
+     ok(!ret && GetLastError() == ERROR_INVALID_PARAMETER,
+        "expected ERROR_INVALID_PARAMETER, got %d\n", GetLastError());
+ 
+@@ -2233,13 +2227,11 @@ static void test_NamedPipeHandleState(void)
+ 
+     state = PIPE_READMODE_MESSAGE;
+     ret = SetNamedPipeHandleState(client, &state, NULL, NULL);
+-    todo_wine
+     ok(ret, "SetNamedPipeHandleState failed: %d\n", GetLastError());
+     /* A message-mode pipe client can also be changed to byte mode.
+      */
+     state = PIPE_READMODE_BYTE;
+     ret = SetNamedPipeHandleState(client, &state, NULL, NULL);
+-    todo_wine
+     ok(ret, "SetNamedPipeHandleState failed: %d\n", GetLastError());
+ 
+     CloseHandle(client);
+-- 
+1.7.9.5
+

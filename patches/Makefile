@@ -216,22 +216,36 @@ kernel32-GetVolumePathName.ok:
 # Patchset kernel32-Named_Pipe
 # |
 # | Included patches:
-# |   *	Support for NamedPipe operations. [rev 2, by Sebastian Lackner / Dan Kegel]
+# |   *	Fix for ConnectNamedPort return value in overlapped mode. [by Dan Kegel]
+# |   *	Support for NamedPipe operations via SOCK_SEQPACKET sockets. [by Sebastian Lackner / Erich E. Hoover / Adam Martinson]
 # |
 # | This patchset fixes the following Wine bugs:
 # |   *	[#16550] ConnectNamedPort should never return OK in overlapped mode (affects chromium ui_tests.exe)
 # |   *	[#17273] Many apps and games need SetNamedPipeHandleState implementation (support for named pipe message
 # | 	mode)(FireFox+Flash, Win8/NET 4.x SDK/vcrun2012, WiX installers)
+# |   *	[#17195] NamedPipe datagrams need to be _really_ datagrams
 # |
 # | Modified files: 
-# |   *	dlls/kernel32/sync.c
+# |   *	dlls/kernel32/sync.c, dlls/kernel32/tests/pipe.c, dlls/ntdll/file.c, server/named_pipe.c, server/protocol.def,
+# | 	server/sock.c, server/sock.h
 # |
 .INTERMEDIATE: kernel32-Named_Pipe.ok
-kernel32-Named_Pipe.ok:
-	$(PATCH) < kernel32-Named_Pipe/0001-kernel32-Change-return-value-of-stub-SetNamedPipeHandl.patch
-	$(PATCH) < kernel32-Named_Pipe/0002-kernel32-ConnectNamedPort-should-return-FALSE-and-se.patch
+kernel32-Named_Pipe.ok: server-Address_Change_Notification.ok ws2_32-TransmitFile.ok ws2_32-Connect_Time.ok
+	$(PATCH) < kernel32-Named_Pipe/0001-kernel32-ConnectNamedPort-should-return-FALSE-and-se.patch
+	$(PATCH) < kernel32-Named_Pipe/0002-kernel32-tests-Always-allow-only-one-specific-test-r.patch
+	$(PATCH) < kernel32-Named_Pipe/0003-kernel32-tests-Add-tests-for-partially-received-pipe.patch
+	$(PATCH) < kernel32-Named_Pipe/0004-kernel32-tests-Add-additional-tests-for-multithreade.patch
+	$(PATCH) < kernel32-Named_Pipe/0005-kernel32-tests-Add-tests-for-PeekNamedPipe-with-part.patch
+	$(PATCH) < kernel32-Named_Pipe/0006-kernel32-tests-Add-tests-for-sending-and-receiving-l.patch
+	$(PATCH) < kernel32-Named_Pipe/0007-kernel32-tests-Add-tests-for-closing-named-pipes.patch
+	$(PATCH) < kernel32-Named_Pipe/0008-server-Show-warning-if-message-mode-is-not-supported.patch
+	$(PATCH) < kernel32-Named_Pipe/0009-server-Use-SOCK_SEQPACKET-socket-in-combination-with.patch
+	$(PATCH) < kernel32-Named_Pipe/0010-server-Store-the-message-read-mode-for-a-pipe-in-the.patch
+	$(PATCH) < kernel32-Named_Pipe/0011-kernel32-Add-implementation-of-SetNamedPipeHandleSta.patch
+	$(PATCH) < kernel32-Named_Pipe/0012-ntdll-Return-properly-if-named-pipe-message-contains.patch
 	@( \
-		echo '+    { "kernel32-Named_Pipe", "Sebastian Lackner / Dan Kegel", "Support for NamedPipe operations. [rev 2]" },'; \
+		echo '+    { "kernel32-Named_Pipe", "Dan Kegel", "Fix for ConnectNamedPort return value in overlapped mode." },'; \
+		echo '+    { "kernel32-Named_Pipe", "Sebastian Lackner / Erich E. Hoover / Adam Martinson", "Support for NamedPipe operations via SOCK_SEQPACKET sockets." },'; \
 	) > kernel32-Named_Pipe.ok
 
 # Patchset kernel32-SystemFileCacheSize
