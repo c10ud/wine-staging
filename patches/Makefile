@@ -217,7 +217,8 @@ kernel32-GetVolumePathName.ok:
 # |
 # | Included patches:
 # |   *	Fix for ConnectNamedPort return value in overlapped mode. [by Dan Kegel]
-# |   *	Support for NamedPipe operations via SOCK_SEQPACKET sockets. [by Sebastian Lackner / Erich E. Hoover / Adam Martinson]
+# |   *	Support for NamedPipe operations via SOCK_SEQPACKET sockets. [rev 2, by Sebastian Lackner / Erich E. Hoover / Adam
+# | 	Martinson]
 # |
 # | This patchset fixes the following Wine bugs:
 # |   *	[#16550] ConnectNamedPort should never return OK in overlapped mode (affects chromium ui_tests.exe)
@@ -243,9 +244,10 @@ kernel32-Named_Pipe.ok: server-Address_Change_Notification.ok ws2_32-TransmitFil
 	$(PATCH) < kernel32-Named_Pipe/0010-server-Store-the-message-read-mode-for-a-pipe-in-the.patch
 	$(PATCH) < kernel32-Named_Pipe/0011-kernel32-Add-implementation-of-SetNamedPipeHandleSta.patch
 	$(PATCH) < kernel32-Named_Pipe/0012-ntdll-Return-properly-if-named-pipe-message-contains.patch
+	$(PATCH) < kernel32-Named_Pipe/0013-ntdll-Properly-handle-zero-byte-messages.patch
 	@( \
 		echo '+    { "kernel32-Named_Pipe", "Dan Kegel", "Fix for ConnectNamedPort return value in overlapped mode." },'; \
-		echo '+    { "kernel32-Named_Pipe", "Sebastian Lackner / Erich E. Hoover / Adam Martinson", "Support for NamedPipe operations via SOCK_SEQPACKET sockets." },'; \
+		echo '+    { "kernel32-Named_Pipe", "Sebastian Lackner / Erich E. Hoover / Adam Martinson", "Support for NamedPipe operations via SOCK_SEQPACKET sockets. [rev 2]" },'; \
 	) > kernel32-Named_Pipe.ok
 
 # Patchset kernel32-SystemFileCacheSize

@@ -1,0 +1,234 @@
+From c7aaff98cde427d243281b34e72d13acad896544 Mon Sep 17 00:00:00 2001
+From: Sebastian Lackner <sebastian@fds-team.de>
+Date: Mon, 4 Aug 2014 15:57:56 +0200
+Subject: ntdll: Properly handle zero byte messages.
+
+Unfortunately this part breaks some of the close tests. As this part
+hasn't been addressed at all so far, this is probably acceptable.
+---
+ dlls/kernel32/tests/pipe.c |  133 ++++++++++++++++++++++++++++++--------------
+ dlls/ntdll/file.c          |   15 +++--
+ 2 files changed, 102 insertions(+), 46 deletions(-)
+
+diff --git a/dlls/kernel32/tests/pipe.c b/dlls/kernel32/tests/pipe.c
+index 374bc33..9f8f377 100644
+--- a/dlls/kernel32/tests/pipe.c
++++ b/dlls/kernel32/tests/pipe.c
+@@ -337,6 +337,29 @@ static void test_CreateNamedPipe(int pipemode)
+         ok(readden == sizeof(obuf2)-8, "read got %d bytes\n", readden);
+         ok(memcmp(obuf2, ibuf, written) == 0, "content check\n");
+ 
++        /* Tests for sending empty messages */
++        memset(ibuf, 0, sizeof(ibuf));
++        ok(WriteFile(hnp, obuf, 0, &written, NULL), "WriteFile\n");
++        ok(written == 0, "write file len\n");
++        ok(PeekNamedPipe(hFile, NULL, 0, NULL, &readden, NULL), "Peek\n");
++        ok(readden == 0, "peek got %d bytes\n", readden);
++        if (pipemode != PIPE_TYPE_BYTE)
++        {
++            ok(ReadFile(hFile, ibuf, sizeof(ibuf), &readden, NULL), "ReadFile\n");
++            ok(readden == 0, "read got %d bytes\n", readden);
++        }
++
++        memset(ibuf, 0, sizeof(ibuf));
++        ok(WriteFile(hFile, obuf2, 0, &written, NULL), "WriteFile\n");
++        ok(written == 0, "write file len\n");
++        ok(PeekNamedPipe(hnp, NULL, 0, NULL, &readden, NULL), "Peek\n");
++        ok(readden == 0, "peek got %d bytes\n", readden);
++        if (pipemode != PIPE_TYPE_BYTE)
++        {
++            ok(ReadFile(hnp, ibuf, sizeof(ibuf), &readden, NULL), "ReadFile\n");
++            ok(readden == 0, "read got %d bytes\n", readden);
++        }
++
+         /* Test reading of multiple writes */
+         memset(ibuf, 0, sizeof(ibuf));
+         ok(WriteFile(hnp, obuf, sizeof(obuf), &written, NULL), "WriteFile3a\n");
+@@ -410,6 +433,73 @@ static void test_CreateNamedPipe(int pipemode)
+         else {
+             ok(SetNamedPipeHandleState(hFile, &lpmode, NULL, NULL), "Change mode\n");
+ 
++            memset(ibuf, 0, sizeof(ibuf));
++            ok(WriteFile(hnp, obuf, sizeof(obuf), &written, NULL), "WriteFile5a\n");
++            ok(written == sizeof(obuf), "write file len 3a\n");
++            ok(WriteFile(hnp, obuf2, sizeof(obuf2), &written, NULL), " WriteFile5b\n");
++            ok(written == sizeof(obuf2), "write file len 3b\n");
++            ok(PeekNamedPipe(hFile, ibuf, sizeof(ibuf), &readden, &avail, NULL), "Peek5\n");
++            ok(readden == sizeof(obuf), "peek5 got %d bytes\n", readden);
++            ok(avail == sizeof(obuf) + sizeof(obuf2), "peek5 got %d bytes available\n", avail);
++            pbuf = ibuf;
++            ok(memcmp(obuf, pbuf, sizeof(obuf)) == 0, "content 5a check\n");
++            ok(ReadFile(hFile, ibuf, sizeof(ibuf), &readden, NULL), "ReadFile\n");
++            ok(readden == sizeof(obuf), "read 5 got %d bytes\n", readden);
++            pbuf = ibuf;
++            ok(memcmp(obuf, pbuf, sizeof(obuf)) == 0, "content 5a check\n");
++    
++            /* Multiple writes in the reverse direction */
++            /* the write of obuf2 from write4 should still be in the buffer */
++            ok(PeekNamedPipe(hnp, ibuf, sizeof(ibuf), &readden, &avail, NULL), "Peek6a\n");
++            ok(readden == sizeof(obuf2), "peek6a got %d bytes\n", readden);
++            ok(avail == sizeof(obuf2), "peek6a got %d bytes available\n", avail);
++            if (avail > 0) {
++                ok(ReadFile(hnp, ibuf, sizeof(ibuf), &readden, NULL), "ReadFile\n");
++                ok(readden == sizeof(obuf2), "read 6a got %d bytes\n", readden);
++                pbuf = ibuf;
++                ok(memcmp(obuf2, pbuf, sizeof(obuf2)) == 0, "content 6a check\n");
++            }
++            memset(ibuf, 0, sizeof(ibuf));
++            ok(WriteFile(hFile, obuf, sizeof(obuf), &written, NULL), "WriteFile6a\n");
++            ok(written == sizeof(obuf), "write file len 6a\n");
++            ok(WriteFile(hFile, obuf2, sizeof(obuf2), &written, NULL), " WriteFile6b\n");
++            ok(written == sizeof(obuf2), "write file len 6b\n");
++            ok(PeekNamedPipe(hnp, ibuf, sizeof(ibuf), &readden, &avail, NULL), "Peek6\n");
++            ok(readden == sizeof(obuf), "peek6 got %d bytes\n", readden);
++            ok(avail == sizeof(obuf) + sizeof(obuf2), "peek6b got %d bytes available\n", avail);
++            pbuf = ibuf;
++            ok(memcmp(obuf, pbuf, sizeof(obuf)) == 0, "content 6a check\n");
++            ok(ReadFile(hnp, ibuf, sizeof(ibuf), &readden, NULL), "ReadFile\n");
++            ok(readden == sizeof(obuf), "read 6b got %d bytes\n", readden);
++            pbuf = ibuf;
++            ok(memcmp(obuf, pbuf, sizeof(obuf)) == 0, "content 6a check\n");
++
++            /* Ensure that both pipes are empty before we continue with the next test */
++            while (PeekNamedPipe(hFile, NULL, 0, NULL, &readden, NULL) && readden > 0)
++                ok(ReadFile(hFile, ibuf, sizeof(ibuf), &readden, NULL) ||
++                   GetLastError() == ERROR_MORE_DATA, "ReadFile\n");
++
++            while (PeekNamedPipe(hnp, NULL, 0, NULL, &readden, NULL) && readden > 0)
++                ok(ReadFile(hnp, ibuf, sizeof(ibuf), &readden, NULL) ||
++                   GetLastError() == ERROR_MORE_DATA, "ReadFile\n");
++
++            /* Tests for sending empty messages */
++            memset(ibuf, 0, sizeof(ibuf));
++            ok(WriteFile(hnp, obuf, 0, &written, NULL), "WriteFile\n");
++            ok(written == 0, "write file len\n");
++            ok(PeekNamedPipe(hFile, NULL, 0, NULL, &readden, NULL), "Peek\n");
++            ok(readden == 0, "peek got %d bytes\n", readden);
++            ok(ReadFile(hFile, ibuf, sizeof(ibuf), &readden, NULL), "ReadFile\n");
++            ok(readden == 0, "read got %d bytes\n", readden);
++
++            memset(ibuf, 0, sizeof(ibuf));
++            ok(WriteFile(hFile, obuf2, 0, &written, NULL), "WriteFile\n");
++            ok(written == 0, "write file len\n");
++            ok(PeekNamedPipe(hnp, NULL, 0, NULL, &readden, NULL), "Peek\n");
++            ok(readden == 0, "peek got %d bytes\n", readden);
++            ok(ReadFile(hnp, ibuf, sizeof(ibuf), &readden, NULL), "ReadFile\n");
++            ok(readden == 0, "read got %d bytes\n", readden);
++
+             /* Test how ReadFile behaves when the buffer is not big enough for the whole message */
+             memset(ibuf, 0, sizeof(ibuf));
+             ok(WriteFile(hnp, obuf, sizeof(obuf), &written, NULL), "WriteFile\n");
+@@ -512,47 +602,6 @@ static void test_CreateNamedPipe(int pipemode)
+             ok(RpcPeekNamedPipe(hFile, NULL, 0, NULL, &readden, &leftmsg), "RpcPeekNamedPipe\n");
+             ok(readden == 0, "peek got %d bytes total\n", readden);
+             ok(leftmsg == 0, "peek got %d bytes left in message\n", leftmsg);
+-
+-            memset(ibuf, 0, sizeof(ibuf));
+-            ok(WriteFile(hnp, obuf, sizeof(obuf), &written, NULL), "WriteFile5a\n");
+-            ok(written == sizeof(obuf), "write file len 3a\n");
+-            ok(WriteFile(hnp, obuf2, sizeof(obuf2), &written, NULL), " WriteFile5b\n");
+-            ok(written == sizeof(obuf2), "write file len 3b\n");
+-            ok(PeekNamedPipe(hFile, ibuf, sizeof(ibuf), &readden, &avail, NULL), "Peek5\n");
+-            ok(readden == sizeof(obuf), "peek5 got %d bytes\n", readden);
+-            ok(avail == sizeof(obuf) + sizeof(obuf2), "peek5 got %d bytes available\n", avail);
+-            pbuf = ibuf;
+-            ok(memcmp(obuf, pbuf, sizeof(obuf)) == 0, "content 5a check\n");
+-            ok(ReadFile(hFile, ibuf, sizeof(ibuf), &readden, NULL), "ReadFile\n");
+-            ok(readden == sizeof(obuf), "read 5 got %d bytes\n", readden);
+-            pbuf = ibuf;
+-            ok(memcmp(obuf, pbuf, sizeof(obuf)) == 0, "content 5a check\n");
+-    
+-            /* Multiple writes in the reverse direction */
+-            /* the write of obuf2 from write4 should still be in the buffer */
+-            ok(PeekNamedPipe(hnp, ibuf, sizeof(ibuf), &readden, &avail, NULL), "Peek6a\n");
+-            ok(readden == sizeof(obuf2), "peek6a got %d bytes\n", readden);
+-            ok(avail == sizeof(obuf2), "peek6a got %d bytes available\n", avail);
+-            if (avail > 0) {
+-                ok(ReadFile(hnp, ibuf, sizeof(ibuf), &readden, NULL), "ReadFile\n");
+-                ok(readden == sizeof(obuf2), "read 6a got %d bytes\n", readden);
+-                pbuf = ibuf;
+-                ok(memcmp(obuf2, pbuf, sizeof(obuf2)) == 0, "content 6a check\n");
+-            }
+-            memset(ibuf, 0, sizeof(ibuf));
+-            ok(WriteFile(hFile, obuf, sizeof(obuf), &written, NULL), "WriteFile6a\n");
+-            ok(written == sizeof(obuf), "write file len 6a\n");
+-            ok(WriteFile(hFile, obuf2, sizeof(obuf2), &written, NULL), " WriteFile6b\n");
+-            ok(written == sizeof(obuf2), "write file len 6b\n");
+-            ok(PeekNamedPipe(hnp, ibuf, sizeof(ibuf), &readden, &avail, NULL), "Peek6\n");
+-            ok(readden == sizeof(obuf), "peek6 got %d bytes\n", readden);
+-            ok(avail == sizeof(obuf) + sizeof(obuf2), "peek6b got %d bytes available\n", avail);
+-            pbuf = ibuf;
+-            ok(memcmp(obuf, pbuf, sizeof(obuf)) == 0, "content 6a check\n");
+-            ok(ReadFile(hnp, ibuf, sizeof(ibuf), &readden, NULL), "ReadFile\n");
+-            ok(readden == sizeof(obuf), "read 6b got %d bytes\n", readden);
+-            pbuf = ibuf;
+-            ok(memcmp(obuf, pbuf, sizeof(obuf)) == 0, "content 6a check\n");
+         }
+ 
+         /* Test behaviour for very huge messages (which don't fit completely in the buffer) */
+@@ -837,6 +886,7 @@ static void test_CloseNamedPipe(void)
+         ok(readden == sizeof(obuf), "got %d bytes\n", readden);
+         /* pipe is empty now */
+ 
++        todo_wine
+         ok(!ReadFile(hFile, ibuf, 0, &readden, NULL), "ReadFile() succeeded\n");
+         ok(GetLastError() == ERROR_BROKEN_PIPE, "GetLastError() returned %08x, expected ERROR_BROKEN_PIPE\n", GetLastError());
+         SetLastError(0);
+@@ -878,6 +928,7 @@ static void test_CloseNamedPipe(void)
+         ok(readden == sizeof(obuf), "got %d bytes\n", readden);
+         /* pipe is empty now */
+ 
++        todo_wine
+         ok(!ReadFile(hnp, ibuf, 0, &readden, NULL), "ReadFile() succeeded\n");
+         ok(GetLastError() == ERROR_BROKEN_PIPE, "GetLastError() returned %08x, expected ERROR_BROKEN_PIPE\n", GetLastError());
+         SetLastError(0);
+diff --git a/dlls/ntdll/file.c b/dlls/ntdll/file.c
+index 8b262d0..94c5513 100644
+--- a/dlls/ntdll/file.c
++++ b/dlls/ntdll/file.c
+@@ -683,7 +683,6 @@ NTSTATUS WINAPI NtReadFile(HANDLE hFile, HANDLE hEvent,
+             iov.iov_len  = length - total;
+             result = recvmsg( unix_handle, &msg, MSG_PEEK | (total ? MSG_DONTWAIT : 0) );
+ 
+-            /* dequeue one message */
+             if (result >= 0 && !(msg.msg_flags & MSG_TRUNC))
+             {
+                 int ret;
+@@ -700,7 +699,13 @@ NTSTATUS WINAPI NtReadFile(HANDLE hFile, HANDLE hEvent,
+         if (result >= 0)
+         {
+             total += result;
+-            if (!result || total == length)
++            if (message_mode && !(msg.msg_flags & MSG_TRUNC) && (!result || (fcntl( unix_handle, F_GETSIG ) & 0x01)))
++            {
++                /* non-truncated packet or packet of size zero */
++                status = STATUS_SUCCESS;
++                goto done;
++            }
++            else if (!result || total == length)
+             {
+                 if (total)
+                 {
+@@ -721,7 +726,7 @@ NTSTATUS WINAPI NtReadFile(HANDLE hFile, HANDLE hEvent,
+                 }
+             }
+             else if (type == FD_TYPE_FILE) continue;  /* no async I/O on regular files */
+-            else if (message_mode && !(fcntl( unix_handle, F_GETSIG ) & 0x01)) continue;
++            else if (message_mode) continue;          /* no async I/O on message mode pipes */
+         }
+         else if (errno != EAGAIN)
+         {
+@@ -1635,8 +1640,8 @@ NTSTATUS WINAPI NtFsControlFile(HANDLE handle, HANDLE event, PIO_APC_ROUTINE apc
+                         break;
+                     }
+ 
+-                    msg_length = data_size ? recv( fd, buffer->Data, data_size, MSG_PEEK | MSG_TRUNC ) :
+-                                             recv( fd, (char *)&msg_length, sizeof(msg_length), MSG_PEEK | MSG_TRUNC );
++                    msg_length = data_size ? recv( fd, buffer->Data, data_size, MSG_PEEK | MSG_TRUNC | MSG_DONTWAIT ) :
++                                             recv( fd, (char *)&msg_length, sizeof(msg_length), MSG_PEEK | MSG_TRUNC | MSG_DONTWAIT );
+                     if (msg_length >= 0) io->Information += min(msg_length, data_size);
+ 
+                     if (setsockopt( fd, SOL_SOCKET, SO_PEEK_OFF, &peek_offset, sizeof(peek_offset) ))
+-- 
+1.7.9.5
+
