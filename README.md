@@ -20,23 +20,28 @@ Wine-Compholio contains fixes for the following Wine bugs:
 * Add implementation for SetNamedPipeHandleState ([Wine Bug #17273](http://bugs.winehq.org/show_bug.cgi?id=17273 "Many apps and games need SetNamedPipeHandleState implementation (support for named pipe message mode)(FireFox+Flash, Win8/NET 4.x SDK/vcrun2012, WiX installers)"))
 * Add implementation of WTSEnumerateProcessesW ([Wine Bug #29903](http://bugs.winehq.org/show_bug.cgi?id=29903 "Some Microsoft debuggers fail to enumerate processes due to wtsapi32.WTSEnumerateProcessesW() being a stub (Microsoft Visual Studio 2005, DbgCLR from .NET 2.0 SDK)"))
 * Add support for extra large and jumbo icon lists in shell32 ([Wine Bug #24721](http://bugs.winehq.org/show_bug.cgi?id=24721 "Explorer++ crashes when choosing to view large icons or extra large icons"))
-* Allow special characters in pipe names. ([Wine Bug #28995](http://bugs.winehq.org/show_bug.cgi?id=28995 "Unable to use named pipes with \">\" character in the name"))
-* Create AppData\LocalLow directory inside the profile directory ([Wine Bug #22896](http://bugs.winehq.org/show_bug.cgi?id=22896 "Multiple applications and games need support for shell32 FOLDERID_LocalAppDataLow (.NET based Unity Engine games, Java JRE 6 in Vista mode)"))
-* Create Saved Games directory inside the profile directory ([Wine Bug #28312](http://bugs.winehq.org/show_bug.cgi?id=28312 "Assassin's Creed Brotherhood v1.03 needs \"Saved Games\" folder"))
+* Allow special characters in pipe names ([Wine Bug #28995](http://bugs.winehq.org/show_bug.cgi?id=28995 "Unable to use named pipes with \">\" character in the name"))
+* Audio stuttering and performance drops in multiple applications ([Wine Bug #30639](http://bugs.winehq.org/show_bug.cgi?id=30639 "Audio stuttering and performance drops in Star Wolves 3"))
+* Fix comparison of punctuation characters in lstrcmp ([Wine Bug #10767](http://bugs.winehq.org/show_bug.cgi?id=10767 "lstrcmp and others do not compare punctuation characters correctly"))
 * Fix for ConnectNamedPort return value in overlapped mode ([Wine Bug #16550](http://bugs.winehq.org/show_bug.cgi?id=16550 "ConnectNamedPort should never return OK in overlapped mode (affects chromium ui_tests.exe)"))
-* Fix race conditions and deadlocks in strmbase/quartz ([Wine Bug #31566](http://bugs.winehq.org/show_bug.cgi?id=31566 "Fallout 3: regression causes block at critical section when radio is enabled"))
+* Fix for programs leaking wndproc slots ([Wine Bug #32451](http://bugs.winehq.org/show_bug.cgi?id=32451 "Multiple GOG.com installer bundles show a broken/unresponsive dialog window during installation (installer process running out of wndproc slots)"))
 * GetSecurityInfo returns NULL DACL for process object ([Wine Bug #15980](http://bugs.winehq.org/show_bug.cgi?id=15980 "Rhapsody 2 crashes on startup (GetSecurityInfo returns NULL DACL for process object)"))
+* Implement ITextDocument_fnRange function ([Wine Bug #12458](http://bugs.winehq.org/show_bug.cgi?id=12458 "Multiple apps fail due to RichEdit ITextDocument_fnRange stub (MySQL Workbench, BlitzMaxDemo137)"))
+* Implement LoadIconMetric function ([Wine Bug #35375](http://bugs.winehq.org/show_bug.cgi?id=35375 "Multiple applications need Vista+ API COMCTL32.dll.380 a.k.a. 'LoadIconMetric' (Solidworks 2013 systray monitor, Microsoft One/SkyDrive)"))
 * Implement a Microsoft Yahei replacement font ([Wine Bug #13829](http://bugs.winehq.org/show_bug.cgi?id=13829 "Wine does not have CJK fonts"))
 * Implement an Arial replacement font ([Wine Bug #32323](http://bugs.winehq.org/show_bug.cgi?id=32323 "Netflix (Silverlight 4.x) and several .NET Framework 3.x/4.0 WPF apps require either Arial or Verdana to be installed"))
 * Make it possible to change media center / tablet pc status ([Wine Bug #18732](http://bugs.winehq.org/show_bug.cgi?id=18732 "Microsoft Experience Pack for Tablet PC 1 refuses to install"))
 * Need for Speed 3 installer requires devices in HKEY_DYN_DATA ([Wine Bug #7115](http://bugs.winehq.org/show_bug.cgi?id=7115 "Need for Speed III installer fails in Win9X mode, reporting \"Could not get 'HardWareKey' value\" (active PnP device keys in 'HKEY_DYN_DATA\\\\Config Manager\\\\Enum' missing)"))
 * Old games cannot locate software-only renderer ([Wine Bug #32581](http://bugs.winehq.org/show_bug.cgi?id=32581 "Invalid dwFlags of reference rasterizer's HAL D3DDEVICEDESC"))
 * Return correct IMediaSeeking stream positions in quartz ([Wine Bug #23174](http://bugs.winehq.org/show_bug.cgi?id=23174 "Fallout 3: Diologue and Video/sound issues"))
-* SHCreateSessionKey not implemented ([Wine Bug #35630](http://bugs.winehq.org/show_bug.cgi?id=35630 "SHCreateSessionKey is unimplemented"))
+* Set ldr.EntryPoint for main executable ([Wine Bug #33034](http://bugs.winehq.org/show_bug.cgi?id=33034 "Many GFWL (Games For Windows Live) 1.x/2.x/3.x games crash or exit silently on startup (DiRT 2/3, GTA IV Steam)"))
 * Support for AllocateAndGetTcpExTableFromStack ([Wine Bug #34372](http://bugs.winehq.org/show_bug.cgi?id=34372 "Add missing function AllocateAndGetTcpExTableFromStack() to iphlpapi.dll"))
 * Support for GetSystemTimes ([Wine Bug #19813](http://bugs.winehq.org/show_bug.cgi?id=19813 "Voddler needs GetSystemTimes to run"))
+* Support for ITextRange, ITextFont and ITextPara ([Wine Bug #18303](http://bugs.winehq.org/show_bug.cgi?id=18303 "Adobe Acrobat Pro 7: Crashes when selecting the \"edit\" menu while having a file open."))
 * Support for Junction Points ([Wine Bug #12401](http://bugs.winehq.org/show_bug.cgi?id=12401 "Support junction points, i.e. DeviceIoCtl(FSCTL_SET_REPARSE_POINT/FSCTL_GET_REPARSE_POINT)"))
+* Support for NtSetInformationFile class FileDispositionInformation ([Wine Bug #30397](http://bugs.winehq.org/show_bug.cgi?id=30397 "Multiple applications need support for NtSetInformationFile class FileDispositionInformation (Cygwin installer, Stylizer 5.x Visual CSS editor, Spoon Studio 2011 (ex Xenocode) application sandboxing scheme)"))
 * Support for PulseAudio backend for audio ([Wine Bug #10495](http://bugs.winehq.org/show_bug.cgi?id=10495 "Wine should support PulseAudio"))
+* Support for SHCreateSessionKey ([Wine Bug #35630](http://bugs.winehq.org/show_bug.cgi?id=35630 "SHCreateSessionKey is unimplemented"))
 * Support for TOOLTIPS_GetTipText edge cases ([Wine Bug #30648](http://bugs.winehq.org/show_bug.cgi?id=30648 "SEGA Genesis / Mega Drive Classic Collection (Steam) crashes on startup"))
 * Support for TransmitFile ([Wine Bug #5048](http://bugs.winehq.org/show_bug.cgi?id=5048 "Multiple applications and games need support for ws2_32 SIO_GET_EXTENSION_FUNCTION_POINTER TransmitFile (WSAID_TRANSMITFILE)"))
 * Support for [Get|Set]SystemFileCacheSize ([Wine Bug #35886](http://bugs.winehq.org/show_bug.cgi?id=35886 "Lotus Notes 9 'cacheset.exe' utility needs KERNEL32.dll.SetSystemFileCacheSize"))
@@ -46,18 +51,20 @@ Wine-Compholio contains fixes for the following Wine bugs:
 * Support for process ACLs ([Wine Bug #22006](http://bugs.winehq.org/show_bug.cgi?id=22006 "OpenProcess does not enforce ACL"))
 * Support for stored file ACLs ([Wine Bug #31858](http://bugs.winehq.org/show_bug.cgi?id=31858 "Netflix on Firefox fails with Internet Connection Problem when loading bar is at 99%"))
 * Support for ws2_32.inet_pton ([Wine Bug #36713](http://bugs.winehq.org/show_bug.cgi?id=36713 "Watch_Dogs requires ws2_32.inet_pton"))
+* Use manual relay for RunDLL_CallEntry16 in shell32 ([Wine Bug #23033](http://bugs.winehq.org/show_bug.cgi?id=23033 "Tages Protection v5.x: games report \"DLL not found shell.dll16.dll\" (Runaway 2: The Dream Of The Turtle, ...)"))
 
 Besides that the following additional changes are included:
 
 * Add default ACLs for user shell folders
 * Add support for Dynamic DST (daylight saving time) information in registry
 * Lockfree algorithm for filedescriptor cache (improves file access speed)
-* Other Pipelight specific enhancements
+* Other Pipelight-specific enhancements
 * Reduced SetTimer minimum value from 10 ms to 5 ms (improves Silverlight framerates)
 * SO_CONNECT_TIME returns the appropriate time
 * Support for GetVolumePathName
 * Workaround for shlwapi URLs with relative paths
 * XEMBED support for embedding Wine windows inside Linux applications
+* nVidia driver for high-end laptop cards does not list all supported resolutions
 
 
 How to install Wine-Compholio

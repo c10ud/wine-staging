@@ -3,49 +3,59 @@
 #
 
 CURDIR ?= ${.CURDIR}
-PATCH := $(CURDIR)/../debian/tools/gitapply.sh -d $(DESTDIR)
+PATCH := $(CURDIR)/../debian/tools/gitapply.sh
+APPLY := (cd $(DESTDIR) && $(PATCH))
+APPLY_FILE = @echo "Applying $(1)"; $(APPLY) < $(CURDIR)/$(1)
 
-PATCHLIST :=	Miscellaneous.ok \
-		Pipelight.ok \
-		atl-IOCS_Property.ok \
-		ddraw-Empty_Hardware_Flags.ok \
-		fonts-Missing_Fonts.ok \
-		iphlpapi-TCP_Table.ok \
-		kernel32-GetSystemTimes.ok \
-		kernel32-GetVolumePathName.ok \
-		kernel32-Named_Pipe.ok \
-		kernel32-SystemFileCacheSize.ok \
-		loader-Cmdline_Diagnostics.ok \
-		ntdll-Dynamic_DST.ok \
-		ntdll-FD_Cache.ok \
-		ntdll-Junction_Points.ok \
-		ntdll-Pipe_SpecialCharacters.ok \
-		quartz-MediaSeeking_Positions.ok \
-		server-ACL_Compat.ok \
-		server-Address_Change_Notification.ok \
-		server-CreateProcess_ACLs.ok \
-		server-Inherited_ACLs.ok \
-		server-Misc_ACL.ok \
-		server-Stored_ACLs.ok \
-		shell32-Default_Folder_ACLs.ok \
-		shell32-Icons.ok \
-		shell32-Register_Folders.ok \
-		shell32-SHCreateSessionKey.ok \
-		shlwapi-UrlCombine.ok \
-		strmbase-Lock_Race_Conditions.ok \
-		user32-GetSystemMetrics.ok \
-		user32-GetTipText.ok \
-		wineboot-HKEY_DYN_DATA.ok \
-		winepulse-PulseAudio_Support.ok \
-		winex11-XEMBED.ok \
-		ws2_32-Connect_Time.ok \
-		ws2_32-TransmitFile.ok \
-		ws2_32-inet_pton.ok \
-		wtsapi32-EnumerateProcesses.ok
+PATCHLIST := \
+	Miscellaneous.ok \
+	Pipelight.ok \
+	atl-IOCS_Property.ok \
+	comctl32-LoadIconMetric.ok \
+	ddraw-Empty_Hardware_Flags.ok \
+	dsound-Fast_Mixer.ok \
+	fonts-Missing_Fonts.ok \
+	iphlpapi-TCP_Table.ok \
+	kernel32-GetSystemTimes.ok \
+	kernel32-GetVolumePathName.ok \
+	kernel32-Named_Pipe.ok \
+	kernel32-SystemFileCacheSize.ok \
+	libs-Unicode_Collation.ok \
+	loader-Cmdline_Diagnostics.ok \
+	ntdll-Dynamic_DST.ok \
+	ntdll-FD_Cache.ok \
+	ntdll-FileDispositionInformation.ok \
+	ntdll-Junction_Points.ok \
+	ntdll-Pipe_SpecialCharacters.ok \
+	ntdll-loader_EntryPoint.ok \
+	quartz-MediaSeeking_Positions.ok \
+	riched20-IText_Interface.ok \
+	server-ACL_Compat.ok \
+	server-Address_Change_Notification.ok \
+	server-CreateProcess_ACLs.ok \
+	server-Inherited_ACLs.ok \
+	server-Misc_ACL.ok \
+	server-Stored_ACLs.ok \
+	shell32-Default_Folder_ACLs.ok \
+	shell32-Icons.ok \
+	shell32-RunDLL_CallEntry16.ok \
+	shell32-SHCreateSessionKey.ok \
+	shlwapi-UrlCombine.ok \
+	user32-GetSystemMetrics.ok \
+	user32-GetTipText.ok \
+	user32-WndProc.ok \
+	wineboot-HKEY_DYN_DATA.ok \
+	winepulse-PulseAudio_Support.ok \
+	winex11-Limited_Resolutions.ok \
+	winex11-XEMBED.ok \
+	ws2_32-Connect_Time.ok \
+	ws2_32-TransmitFile.ok \
+	ws2_32-inet_pton.ok \
+	wtsapi32-EnumerateProcesses.ok
 
 .PHONY: install
 install: $(PATCHLIST)
-	cat *.ok | sort | $(CURDIR)/../debian/tools/patchlist.sh | $(PATCH)
+	cat *.ok | sort | $(CURDIR)/../debian/tools/patchlist.sh | $(APPLY)
 	cd $(DESTDIR) && autoreconf -f
 	cd $(DESTDIR) && ./tools/make_requests
 
@@ -61,19 +71,23 @@ clean:
 # |   *	kernel32: Silence repeated CompareStringEx FIXME. [by Sebastian Lackner]
 # |   *	wined3d: Silence repeated resource_check_usage FIXME. [rev 2, by Erich E. Hoover]
 # |   *	wined3d: Silence repeated wined3d_swapchain_present FIXME. [by Sebastian Lackner]
+# |   *	Appease the blessed version of gcc (4.5) when -Werror is enabled. [by Erich E. Hoover]
 # |
 # | Modified files: 
-# |   *	dlls/kernel32/locale.c, dlls/wined3d/resource.c, dlls/wined3d/swapchain.c
+# |   *	dlls/d3d9/tests/visual.c, dlls/kernel32/locale.c, dlls/netapi32/netapi32.c, dlls/winealsa.drv/mmdevdrv.c,
+# | 	dlls/wined3d/glsl_shader.c, dlls/wined3d/resource.c, dlls/wined3d/swapchain.c, server/object.c, tools/makedep.c
 # |
 .INTERMEDIATE: Miscellaneous.ok
 Miscellaneous.ok:
-	$(PATCH) < Miscellaneous/0001-wined3d-Silence-repeated-resource_check_usage-FIXME.patch
-	$(PATCH) < Miscellaneous/0002-kernel32-Silence-repeated-CompareStringEx-FIXME.patch
-	$(PATCH) < Miscellaneous/0003-wined3d-Silence-repeated-wined3d_swapchain_present-F.patch
+	$(call APPLY_FILE,Miscellaneous/0001-wined3d-Silence-repeated-resource_check_usage-FIXME.patch)
+	$(call APPLY_FILE,Miscellaneous/0002-kernel32-Silence-repeated-CompareStringEx-FIXME.patch)
+	$(call APPLY_FILE,Miscellaneous/0003-wined3d-Silence-repeated-wined3d_swapchain_present-F.patch)
+	$(call APPLY_FILE,Miscellaneous/0004-Appease-the-blessed-version-of-gcc-4.5-when-Werror-i.patch)
 	@( \
 		echo '+    { "Miscellaneous", "Sebastian Lackner", "kernel32: Silence repeated CompareStringEx FIXME." },'; \
 		echo '+    { "Miscellaneous", "Erich E. Hoover", "wined3d: Silence repeated resource_check_usage FIXME. [rev 2]" },'; \
 		echo '+    { "Miscellaneous", "Sebastian Lackner", "wined3d: Silence repeated wined3d_swapchain_present FIXME." },'; \
+		echo '+    { "Miscellaneous", "Erich E. Hoover", "Appease the blessed version of gcc (4.5) when -Werror is enabled." },'; \
 	) > Miscellaneous.ok
 
 # Patchset Pipelight
@@ -90,10 +104,10 @@ Miscellaneous.ok:
 # |
 .INTERMEDIATE: Pipelight.ok
 Pipelight.ok:
-	$(PATCH) < Pipelight/0001-winex11-Implement-X11DRV_FLUSH_GDI_DISPLAY-ExtEscape-c.patch
-	$(PATCH) < Pipelight/0002-user32-Decrease-minimum-SetTimer-interval-to-5-ms.patch
-	$(PATCH) < Pipelight/0003-wined3d-allow-changing-strict-drawing-through-an-exp.patch
-	$(PATCH) < Pipelight/0004-winex11.drv-Indicate-direct-rendering-through-OpenGL.patch
+	$(call APPLY_FILE,Pipelight/0001-winex11-Implement-X11DRV_FLUSH_GDI_DISPLAY-ExtEscape-c.patch)
+	$(call APPLY_FILE,Pipelight/0002-user32-Decrease-minimum-SetTimer-interval-to-5-ms.patch)
+	$(call APPLY_FILE,Pipelight/0003-wined3d-allow-changing-strict-drawing-through-an-exp.patch)
+	$(call APPLY_FILE,Pipelight/0004-winex11.drv-Indicate-direct-rendering-through-OpenGL.patch)
 	@( \
 		echo '+    { "Pipelight", "Michael Müller", "Decrease minimum SetTimer interval to 5 ms. [rev 2]" },'; \
 		echo '+    { "Pipelight", "Michael Müller", "Allow changing strict draw ordering through an exported function." },'; \
@@ -114,10 +128,31 @@ Pipelight.ok:
 # |
 .INTERMEDIATE: atl-IOCS_Property.ok
 atl-IOCS_Property.ok:
-	$(PATCH) < atl-IOCS_Property/0001-atl-Don-t-use-GWLP_USERDATA-to-store-IOCS-to-avoid-c.patch
+	$(call APPLY_FILE,atl-IOCS_Property/0001-atl-Don-t-use-GWLP_USERDATA-to-store-IOCS-to-avoid-c.patch)
 	@( \
 		echo '+    { "atl-IOCS_Property", "Qian Hong", "Store IOCS data in a property instead of GWLP_USERDATA." },'; \
 	) > atl-IOCS_Property.ok
+
+# Patchset comctl32-LoadIconMetric
+# |
+# | Included patches:
+# |   *	Implement LoadIconMetric function. [by Michael Müller]
+# |
+# | This patchset fixes the following Wine bugs:
+# |   *	[#35375] Multiple applications need Vista+ API COMCTL32.dll.380 a.k.a. 'LoadIconMetric' (Solidworks 2013 systray
+# | 	monitor, Microsoft One/SkyDrive)
+# |
+# | Modified files: 
+# |   *	dlls/comctl32/Makefile.in, dlls/comctl32/comctl32.spec, dlls/comctl32/icon.c, dlls/comctl32/tests/misc.c,
+# | 	include/commctrl.h
+# |
+.INTERMEDIATE: comctl32-LoadIconMetric.ok
+comctl32-LoadIconMetric.ok:
+	$(call APPLY_FILE,comctl32-LoadIconMetric/0001-comctl32-Implement-LoadIconMetric-function.patch)
+	$(call APPLY_FILE,comctl32-LoadIconMetric/0002-comctl32-tests-Add-tests-for-LoadIconMetric-function.patch)
+	@( \
+		echo '+    { "comctl32-LoadIconMetric", "Michael Müller", "Implement LoadIconMetric function." },'; \
+	) > comctl32-LoadIconMetric.ok
 
 # Patchset ddraw-Empty_Hardware_Flags
 # |
@@ -132,11 +167,29 @@ atl-IOCS_Property.ok:
 # |
 .INTERMEDIATE: ddraw-Empty_Hardware_Flags.ok
 ddraw-Empty_Hardware_Flags.ok:
-	$(PATCH) < ddraw-Empty_Hardware_Flags/0001-ddraw-tests-Ignore-broken-behavior-of-D3DTRANSFORM_U.patch
-	$(PATCH) < ddraw-Empty_Hardware_Flags/0002-ddraw-Return-empty-D3D-hardware-flags-for-HEL-device.patch
+	$(call APPLY_FILE,ddraw-Empty_Hardware_Flags/0001-ddraw-tests-Remove-broken-tests-of-D3DTRANSFORM_UNCL.patch)
+	$(call APPLY_FILE,ddraw-Empty_Hardware_Flags/0002-ddraw-Return-empty-D3D-hardware-flags-for-RGB-device.patch)
 	@( \
 		echo '+    { "ddraw-Empty_Hardware_Flags", "Erich E. Hoover", "Return empty D3D hardware flags for HEL device enumeration." },'; \
 	) > ddraw-Empty_Hardware_Flags.ok
+
+# Patchset dsound-Fast_Mixer
+# |
+# | Included patches:
+# |   *	Add a linear resampler for use with a large number of dsound mixing buffers. [by Alexander E. Patrakov]
+# |
+# | This patchset fixes the following Wine bugs:
+# |   *	[#30639] Audio stuttering and performance drops in Star Wolves 3
+# |
+# | Modified files: 
+# |   *	dlls/dsound/dsound_main.c, dlls/dsound/dsound_private.h, dlls/dsound/mixer.c
+# |
+.INTERMEDIATE: dsound-Fast_Mixer.ok
+dsound-Fast_Mixer.ok:
+	$(call APPLY_FILE,dsound-Fast_Mixer/0001-dsound-Add-a-linear-resampler-for-use-with-a-large-n.patch)
+	@( \
+		echo '+    { "dsound-Fast_Mixer", "Alexander E. Patrakov", "Add a linear resampler for use with a large number of dsound mixing buffers." },'; \
+	) > dsound-Fast_Mixer.ok
 
 # Patchset fonts-Missing_Fonts
 # |
@@ -149,12 +202,13 @@ ddraw-Empty_Hardware_Flags.ok:
 # |   *	[#13829] Wine does not have CJK fonts
 # |
 # | Modified files: 
-# |   *	fonts/Makefile.in, fonts/arial.sfd, fonts/arial.ttf, fonts/msyh.sfd, fonts/msyh.ttf
+# |   *	fonts/Makefile.in, fonts/arial.sfd, fonts/arial.ttf, fonts/cour.sfd, fonts/cour.ttf, fonts/msyh.sfd, fonts/msyh.ttf
 # |
 .INTERMEDIATE: fonts-Missing_Fonts.ok
 fonts-Missing_Fonts.ok:
-	$(PATCH) < fonts-Missing_Fonts/0001-fonts-Add-Liberation-Sans-as-an-Arial-replacement.patch
-	$(PATCH) < fonts-Missing_Fonts/0002-fonts-Add-WenQuanYi-Micro-Hei-as-a-Microsoft-Yahei-r.patch
+	$(call APPLY_FILE,fonts-Missing_Fonts/0001-fonts-Add-Liberation-Sans-as-an-Arial-replacement.patch)
+	$(call APPLY_FILE,fonts-Missing_Fonts/0002-fonts-Add-WenQuanYi-Micro-Hei-as-a-Microsoft-Yahei-r.patch)
+	$(call APPLY_FILE,fonts-Missing_Fonts/0003-fonts-Add-Courier-Prime-as-a-Courier-New-replacement.patch)
 	@( \
 		echo '+    { "fonts-Missing_Fonts", "Torsten Kurbad / Erich E. Hoover", "Implement missing fonts expected by Silverlight. [rev 2]" },'; \
 	) > fonts-Missing_Fonts.ok
@@ -172,7 +226,7 @@ fonts-Missing_Fonts.ok:
 # |
 .INTERMEDIATE: iphlpapi-TCP_Table.ok
 iphlpapi-TCP_Table.ok:
-	$(PATCH) < iphlpapi-TCP_Table/0001-iphlpapi-Implement-AllocateAndGetTcpExTableFromStack.patch
+	$(call APPLY_FILE,iphlpapi-TCP_Table/0001-iphlpapi-Implement-AllocateAndGetTcpExTableFromStack.patch)
 	@( \
 		echo '+    { "iphlpapi-TCP_Table", "Erich E. Hoover", "Implement AllocateAndGetTcpExTableFromStack." },'; \
 	) > iphlpapi-TCP_Table.ok
@@ -190,8 +244,8 @@ iphlpapi-TCP_Table.ok:
 # |
 .INTERMEDIATE: kernel32-GetSystemTimes.ok
 kernel32-GetSystemTimes.ok:
-	$(PATCH) < kernel32-GetSystemTimes/0001-kernel32-Add-tests-for-GetSystemTimes.patch
-	$(PATCH) < kernel32-GetSystemTimes/0002-kernel32-Implement-GetSystemTimes.patch
+	$(call APPLY_FILE,kernel32-GetSystemTimes/0001-kernel32-Add-tests-for-GetSystemTimes.patch)
+	$(call APPLY_FILE,kernel32-GetSystemTimes/0002-kernel32-Implement-GetSystemTimes.patch)
 	@( \
 		echo '+    { "kernel32-GetSystemTimes", "Louis Lenders / Erich E. Hoover", "Implement GetSystemTimes." },'; \
 	) > kernel32-GetSystemTimes.ok
@@ -206,9 +260,9 @@ kernel32-GetSystemTimes.ok:
 # |
 .INTERMEDIATE: kernel32-GetVolumePathName.ok
 kernel32-GetVolumePathName.ok:
-	$(PATCH) < kernel32-GetVolumePathName/0001-kernel32-Implement-GetVolumePathName.patch
-	$(PATCH) < kernel32-GetVolumePathName/0002-kernel32-Convert-GetVolumePathName-tests-into-a-list.patch
-	$(PATCH) < kernel32-GetVolumePathName/0003-kernel32-Add-a-bunch-more-GetVolumePathName-tests.patch
+	$(call APPLY_FILE,kernel32-GetVolumePathName/0001-kernel32-Implement-GetVolumePathName.patch)
+	$(call APPLY_FILE,kernel32-GetVolumePathName/0002-kernel32-Convert-GetVolumePathName-tests-into-a-list.patch)
+	$(call APPLY_FILE,kernel32-GetVolumePathName/0003-kernel32-Add-a-bunch-more-GetVolumePathName-tests.patch)
 	@( \
 		echo '+    { "kernel32-GetVolumePathName", "Erich E. Hoover", "Implement GetVolumePathName." },'; \
 	) > kernel32-GetVolumePathName.ok
@@ -231,20 +285,20 @@ kernel32-GetVolumePathName.ok:
 # | 	server/sock.c, server/sock.h
 # |
 .INTERMEDIATE: kernel32-Named_Pipe.ok
-kernel32-Named_Pipe.ok: server-Address_Change_Notification.ok ws2_32-TransmitFile.ok ws2_32-Connect_Time.ok
-	$(PATCH) < kernel32-Named_Pipe/0001-kernel32-ConnectNamedPort-should-return-FALSE-and-se.patch
-	$(PATCH) < kernel32-Named_Pipe/0002-kernel32-tests-Always-allow-only-one-specific-test-r.patch
-	$(PATCH) < kernel32-Named_Pipe/0003-kernel32-tests-Add-tests-for-partially-received-pipe.patch
-	$(PATCH) < kernel32-Named_Pipe/0004-kernel32-tests-Add-additional-tests-for-multithreade.patch
-	$(PATCH) < kernel32-Named_Pipe/0005-kernel32-tests-Add-tests-for-PeekNamedPipe-with-part.patch
-	$(PATCH) < kernel32-Named_Pipe/0006-kernel32-tests-Add-tests-for-sending-and-receiving-l.patch
-	$(PATCH) < kernel32-Named_Pipe/0007-kernel32-tests-Add-tests-for-closing-named-pipes.patch
-	$(PATCH) < kernel32-Named_Pipe/0008-server-Show-warning-if-message-mode-is-not-supported.patch
-	$(PATCH) < kernel32-Named_Pipe/0009-server-Use-SOCK_SEQPACKET-socket-in-combination-with.patch
-	$(PATCH) < kernel32-Named_Pipe/0010-server-Store-the-message-read-mode-for-a-pipe-in-the.patch
-	$(PATCH) < kernel32-Named_Pipe/0011-kernel32-Add-implementation-of-SetNamedPipeHandleSta.patch
-	$(PATCH) < kernel32-Named_Pipe/0012-ntdll-Return-properly-if-named-pipe-message-contains.patch
-	$(PATCH) < kernel32-Named_Pipe/0013-ntdll-Properly-handle-zero-byte-messages.patch
+kernel32-Named_Pipe.ok: ws2_32-Connect_Time.ok ws2_32-TransmitFile.ok server-Address_Change_Notification.ok
+	$(call APPLY_FILE,kernel32-Named_Pipe/0001-kernel32-ConnectNamedPort-should-return-FALSE-and-se.patch)
+	$(call APPLY_FILE,kernel32-Named_Pipe/0002-kernel32-tests-Always-allow-only-one-specific-test-r.patch)
+	$(call APPLY_FILE,kernel32-Named_Pipe/0003-kernel32-tests-Add-tests-for-partially-received-pipe.patch)
+	$(call APPLY_FILE,kernel32-Named_Pipe/0004-kernel32-tests-Add-additional-tests-for-multithreade.patch)
+	$(call APPLY_FILE,kernel32-Named_Pipe/0005-kernel32-tests-Add-tests-for-PeekNamedPipe-with-part.patch)
+	$(call APPLY_FILE,kernel32-Named_Pipe/0006-kernel32-tests-Add-tests-for-sending-and-receiving-l.patch)
+	$(call APPLY_FILE,kernel32-Named_Pipe/0007-kernel32-tests-Add-tests-for-closing-named-pipes.patch)
+	$(call APPLY_FILE,kernel32-Named_Pipe/0008-server-Show-warning-if-message-mode-is-not-supported.patch)
+	$(call APPLY_FILE,kernel32-Named_Pipe/0009-server-Use-SOCK_SEQPACKET-socket-in-combination-with.patch)
+	$(call APPLY_FILE,kernel32-Named_Pipe/0010-server-Store-the-message-read-mode-for-a-pipe-in-the.patch)
+	$(call APPLY_FILE,kernel32-Named_Pipe/0011-kernel32-Add-implementation-of-SetNamedPipeHandleSta.patch)
+	$(call APPLY_FILE,kernel32-Named_Pipe/0012-ntdll-Return-properly-if-named-pipe-message-contains.patch)
+	$(call APPLY_FILE,kernel32-Named_Pipe/0013-ntdll-Properly-handle-zero-byte-messages.patch)
 	@( \
 		echo '+    { "kernel32-Named_Pipe", "Dan Kegel", "Fix for ConnectNamedPort return value in overlapped mode." },'; \
 		echo '+    { "kernel32-Named_Pipe", "Sebastian Lackner / Erich E. Hoover / Adam Martinson", "Support for NamedPipe operations via SOCK_SEQPACKET sockets. [rev 2]" },'; \
@@ -263,10 +317,28 @@ kernel32-Named_Pipe.ok: server-Address_Change_Notification.ok ws2_32-TransmitFil
 # |
 .INTERMEDIATE: kernel32-SystemFileCacheSize.ok
 kernel32-SystemFileCacheSize.ok:
-	$(PATCH) < kernel32-SystemFileCacheSize/0001-kernel32-Add-stub-for-Get-Set-SystemFileCacheSize.patch
+	$(call APPLY_FILE,kernel32-SystemFileCacheSize/0001-kernel32-Add-stub-for-Get-Set-SystemFileCacheSize.patch)
 	@( \
 		echo '+    { "kernel32-SystemFileCacheSize", "Austin English", "Add stub for [Get|Set]SystemFileCacheSize." },'; \
 	) > kernel32-SystemFileCacheSize.ok
+
+# Patchset libs-Unicode_Collation
+# |
+# | Included patches:
+# |   *	Fix comparison of punctuation characters. [by Dmitry Timoshkov]
+# |
+# | This patchset fixes the following Wine bugs:
+# |   *	[#10767] lstrcmp and others do not compare punctuation characters correctly
+# |
+# | Modified files: 
+# |   *	dlls/kernel32/tests/locale.c, libs/wine/collation.c
+# |
+.INTERMEDIATE: libs-Unicode_Collation.ok
+libs-Unicode_Collation.ok:
+	$(call APPLY_FILE,libs-Unicode_Collation/0001-libs-Fix-most-problems-with-CompareString.patch)
+	@( \
+		echo '+    { "libs-Unicode_Collation", "Dmitry Timoshkov", "Fix comparison of punctuation characters." },'; \
+	) > libs-Unicode_Collation.ok
 
 # Patchset loader-Cmdline_Diagnostics
 # |
@@ -280,8 +352,8 @@ kernel32-SystemFileCacheSize.ok:
 # |
 .INTERMEDIATE: loader-Cmdline_Diagnostics.ok
 loader-Cmdline_Diagnostics.ok:
-	$(PATCH) < loader-Cmdline_Diagnostics/0001-loader-Add-commandline-option-patches-to-show-the-pa.patch
-	$(PATCH) < loader-Cmdline_Diagnostics/0002-loader-Add-commandline-option-check-libs.patch
+	$(call APPLY_FILE,loader-Cmdline_Diagnostics/0001-loader-Add-commandline-option-patches-to-show-the-pa.patch)
+	$(call APPLY_FILE,loader-Cmdline_Diagnostics/0002-loader-Add-commandline-option-check-libs.patch)
 	@( \
 		echo '+    { "loader-Cmdline_Diagnostics", "Sebastian Lackner", "Add commandline option --patches to show the patch list." },'; \
 		echo '+    { "loader-Cmdline_Diagnostics", "Michael Müller", "Add commandline option --check-libs to test if shared libraries are installed." },'; \
@@ -301,8 +373,8 @@ loader-Cmdline_Diagnostics.ok:
 # |
 .INTERMEDIATE: ntdll-Dynamic_DST.ok
 ntdll-Dynamic_DST.ok:
-	$(PATCH) < ntdll-Dynamic_DST/0001-ntdll-Add-support-for-Dynamic-DST-daylight-saving-ti.patch
-	$(PATCH) < ntdll-Dynamic_DST/0002-wine.inf-Add-Dynamic-DST-exceptions-for-Israel-Stand.patch
+	$(call APPLY_FILE,ntdll-Dynamic_DST/0001-ntdll-Add-support-for-Dynamic-DST-daylight-saving-ti.patch)
+	$(call APPLY_FILE,ntdll-Dynamic_DST/0002-wine.inf-Add-Dynamic-DST-exceptions-for-Israel-Stand.patch)
 	@( \
 		echo '+    { "ntdll-Dynamic_DST", "Michael Müller", "Add support for Dynamic DST (daylight saving time) information in registry." },'; \
 		echo '+    { "ntdll-Dynamic_DST", "Sebastian Lackner", "Add Dynamic DST exceptions for Israel Standard Time." },'; \
@@ -318,10 +390,31 @@ ntdll-Dynamic_DST.ok:
 # |
 .INTERMEDIATE: ntdll-FD_Cache.ok
 ntdll-FD_Cache.ok:
-	$(PATCH) < ntdll-FD_Cache/0001-ntdll-Use-lockfree-implementation-for-get_cached_fd.patch
+	$(call APPLY_FILE,ntdll-FD_Cache/0001-ntdll-Use-lockfree-implementation-for-get_cached_fd.patch)
 	@( \
 		echo '+    { "ntdll-FD_Cache", "Sebastian Lackner", "Use lockfree implementation for get_cached_fd. [rev 4]" },'; \
 	) > ntdll-FD_Cache.ok
+
+# Patchset ntdll-FileDispositionInformation
+# |
+# | Included patches:
+# |   *	Add support for setting file disposition information. [by Dmitry Timoshkov / Erich E. Hoover]
+# |
+# | This patchset fixes the following Wine bugs:
+# |   *	[#30397] Multiple applications need support for NtSetInformationFile class FileDispositionInformation (Cygwin installer,
+# | 	Stylizer 5.x Visual CSS editor, Spoon Studio 2011 (ex Xenocode) application sandboxing scheme)
+# |
+# | Modified files: 
+# |   *	dlls/ntdll/file.c, dlls/ntdll/tests/file.c, server/fd.c, server/file.c, server/file.h, server/protocol.def
+# |
+.INTERMEDIATE: ntdll-FileDispositionInformation.ok
+ntdll-FileDispositionInformation.ok:
+	$(call APPLY_FILE,ntdll-FileDispositionInformation/0001-server-Keep-a-pointer-to-parent-s-fd-unix_name-in-th.patch)
+	$(call APPLY_FILE,ntdll-FileDispositionInformation/0002-server-Add-support-for-setting-file-disposition-info.patch)
+	$(call APPLY_FILE,ntdll-FileDispositionInformation/0003-server-Do-not-permit-FileDispositionInformation-to-d.patch)
+	@( \
+		echo '+    { "ntdll-FileDispositionInformation", "Dmitry Timoshkov / Erich E. Hoover", "Add support for setting file disposition information." },'; \
+	) > ntdll-FileDispositionInformation.ok
 
 # Patchset ntdll-Junction_Points
 # |
@@ -336,13 +429,13 @@ ntdll-FD_Cache.ok:
 # |
 .INTERMEDIATE: ntdll-Junction_Points.ok
 ntdll-Junction_Points.ok:
-	$(PATCH) < ntdll-Junction_Points/0001-ntdll-Add-support-for-junction-point-creation.patch
-	$(PATCH) < ntdll-Junction_Points/0002-ntdll-Add-support-for-reading-junction-points.patch
-	$(PATCH) < ntdll-Junction_Points/0003-ntdll-Add-support-for-deleting-junction-points.patch
-	$(PATCH) < ntdll-Junction_Points/0004-ntdll-Advertise-that-a-file-is-a-junction-point.patch
-	$(PATCH) < ntdll-Junction_Points/0005-kernel32-ntdll-Add-support-for-deleting-junction-poi.patch
-	$(PATCH) < ntdll-Junction_Points/0006-kernel32-Advertise-junction-point-support.patch
-	$(PATCH) < ntdll-Junction_Points/0007-ntdll-tests-Add-test-for-deleting-junction-point-tar.patch
+	$(call APPLY_FILE,ntdll-Junction_Points/0001-ntdll-Add-support-for-junction-point-creation.patch)
+	$(call APPLY_FILE,ntdll-Junction_Points/0002-ntdll-Add-support-for-reading-junction-points.patch)
+	$(call APPLY_FILE,ntdll-Junction_Points/0003-ntdll-Add-support-for-deleting-junction-points.patch)
+	$(call APPLY_FILE,ntdll-Junction_Points/0004-ntdll-Advertise-that-a-file-is-a-junction-point.patch)
+	$(call APPLY_FILE,ntdll-Junction_Points/0005-kernel32-ntdll-Add-support-for-deleting-junction-poi.patch)
+	$(call APPLY_FILE,ntdll-Junction_Points/0006-kernel32-Advertise-junction-point-support.patch)
+	$(call APPLY_FILE,ntdll-Junction_Points/0007-ntdll-tests-Add-test-for-deleting-junction-point-tar.patch)
 	@( \
 		echo '+    { "ntdll-Junction_Points", "Erich E. Hoover", "Support for junction points/reparse points." },'; \
 	) > ntdll-Junction_Points.ok
@@ -360,10 +453,28 @@ ntdll-Junction_Points.ok:
 # |
 .INTERMEDIATE: ntdll-Pipe_SpecialCharacters.ok
 ntdll-Pipe_SpecialCharacters.ok:
-	$(PATCH) < ntdll-Pipe_SpecialCharacters/0001-ntdll-Allow-special-characters-in-pipe-names.patch
+	$(call APPLY_FILE,ntdll-Pipe_SpecialCharacters/0001-ntdll-Allow-special-characters-in-pipe-names.patch)
 	@( \
 		echo '+    { "ntdll-Pipe_SpecialCharacters", "Michael Müller", "Allow special characters in pipe names." },'; \
 	) > ntdll-Pipe_SpecialCharacters.ok
+
+# Patchset ntdll-loader_EntryPoint
+# |
+# | Included patches:
+# |   *	Set ldr.EntryPoint for main executable. [by Sebastian Lackner]
+# |
+# | This patchset fixes the following Wine bugs:
+# |   *	[#33034] Many GFWL (Games For Windows Live) 1.x/2.x/3.x games crash or exit silently on startup (DiRT 2/3, GTA IV Steam)
+# |
+# | Modified files: 
+# |   *	dlls/ntdll/loader.c
+# |
+.INTERMEDIATE: ntdll-loader_EntryPoint.ok
+ntdll-loader_EntryPoint.ok:
+	$(call APPLY_FILE,ntdll-loader_EntryPoint/0001-ntdll-Set-ldr.EntryPoint-for-main-executable.patch)
+	@( \
+		echo '+    { "ntdll-loader_EntryPoint", "Sebastian Lackner", "Set ldr.EntryPoint for main executable." },'; \
+	) > ntdll-loader_EntryPoint.ok
 
 # Patchset quartz-MediaSeeking_Positions
 # |
@@ -378,13 +489,45 @@ ntdll-Pipe_SpecialCharacters.ok:
 # |
 .INTERMEDIATE: quartz-MediaSeeking_Positions.ok
 quartz-MediaSeeking_Positions.ok:
-	$(PATCH) < quartz-MediaSeeking_Positions/0001-quartz-Include-the-stream-position-in-addition-to-th.patch
-	$(PATCH) < quartz-MediaSeeking_Positions/0002-quartz-Implement-MediaSeeking_GetCurrentPosition-on-.patch
-	$(PATCH) < quartz-MediaSeeking_Positions/0003-quartz-Implement-MediaSeeking_GetStopPosition-on-top.patch
-	$(PATCH) < quartz-MediaSeeking_Positions/0004-quartz-Remove-unused-cache-of-MediaSeeking-stop-posi.patch
+	$(call APPLY_FILE,quartz-MediaSeeking_Positions/0001-quartz-Include-the-stream-position-in-addition-to-th.patch)
+	$(call APPLY_FILE,quartz-MediaSeeking_Positions/0002-quartz-Implement-MediaSeeking_GetCurrentPosition-on-.patch)
+	$(call APPLY_FILE,quartz-MediaSeeking_Positions/0003-quartz-Implement-MediaSeeking_GetStopPosition-on-top.patch)
+	$(call APPLY_FILE,quartz-MediaSeeking_Positions/0004-quartz-Remove-unused-cache-of-MediaSeeking-stop-posi.patch)
 	@( \
 		echo '+    { "quartz-MediaSeeking_Positions", "Erich E. Hoover", "Return correct IMediaSeeking stream positions in quartz." },'; \
 	) > quartz-MediaSeeking_Positions.ok
+
+# Patchset riched20-IText_Interface
+# |
+# | Included patches:
+# |   *	Implement Stubs for ITextRange interface. [by Jactry Zeng]
+# |   *	Implement IText{Range,Selection}::{GetChar,GetStart,GetEnd,GetDuplicate,Collapse,SetStart,SetEnd}. [by Jactry Zeng]
+# |   *	Implement Stubs for ITextFont interface. [by Jactry Zeng]
+# |   *	Implement Stubs for ITextPara interface. [by Jactry Zeng]
+# |
+# | This patchset fixes the following Wine bugs:
+# |   *	[#12458] Multiple apps fail due to RichEdit ITextDocument_fnRange stub (MySQL Workbench, BlitzMaxDemo137)
+# |   *	[#18303] Adobe Acrobat Pro 7: Crashes when selecting the "edit" menu while having a file open.
+# |
+# | Modified files: 
+# |   *	dlls/riched20/richole.c, dlls/riched20/tests/richole.c
+# |
+.INTERMEDIATE: riched20-IText_Interface.ok
+riched20-IText_Interface.ok:
+	$(call APPLY_FILE,riched20-IText_Interface/0001-riched20-Stub-for-ITextRange-interface-and-implement.patch)
+	$(call APPLY_FILE,riched20-IText_Interface/0002-riched20-Implement-ITextSelection-GetChar-and-ITextR.patch)
+	$(call APPLY_FILE,riched20-IText_Interface/0003-riched20-Implement-IText-Selection-Range-Get-Start-E.patch)
+	$(call APPLY_FILE,riched20-IText_Interface/0004-riched20-Implement-ITextRange-GetDuplicate.patch)
+	$(call APPLY_FILE,riched20-IText_Interface/0005-riched20-Implement-ITextRange-Collapse-and-ITextSele.patch)
+	$(call APPLY_FILE,riched20-IText_Interface/0006-riched20-Implement-IText-Selection-Range-Set-Start-E.patch)
+	$(call APPLY_FILE,riched20-IText_Interface/0007-riched20-Stub-for-ITextFont-interface-and-implement-.patch)
+	$(call APPLY_FILE,riched20-IText_Interface/0008-riched20-Stub-for-ITextPara-interface-and-implement-.patch)
+	@( \
+		echo '+    { "riched20-IText_Interface", "Jactry Zeng", "Implement Stubs for ITextRange interface." },'; \
+		echo '+    { "riched20-IText_Interface", "Jactry Zeng", "Implement IText{Range,Selection}::{GetChar,GetStart,GetEnd,GetDuplicate,Collapse,SetStart,SetEnd}." },'; \
+		echo '+    { "riched20-IText_Interface", "Jactry Zeng", "Implement Stubs for ITextFont interface." },'; \
+		echo '+    { "riched20-IText_Interface", "Jactry Zeng", "Implement Stubs for ITextPara interface." },'; \
+	) > riched20-IText_Interface.ok
 
 # Patchset server-ACL_Compat
 # |
@@ -396,7 +539,7 @@ quartz-MediaSeeking_Positions.ok:
 # |
 .INTERMEDIATE: server-ACL_Compat.ok
 server-ACL_Compat.ok: server-Inherited_ACLs.ok
-	$(PATCH) < server-ACL_Compat/0010-server-Add-compatibility-code-for-handling-the-old-m.patch
+	$(call APPLY_FILE,server-ACL_Compat/0010-server-Add-compatibility-code-for-handling-the-old-m.patch)
 	@( \
 		echo '+    { "server-ACL_Compat", "Erich E. Hoover", "Compatibility patch for old method of storing extended file system attributes. [rev 6]" },'; \
 	) > server-ACL_Compat.ok
@@ -414,11 +557,11 @@ server-ACL_Compat.ok: server-Inherited_ACLs.ok
 # |
 .INTERMEDIATE: server-Address_Change_Notification.ok
 server-Address_Change_Notification.ok:
-	$(PATCH) < server-Address_Change_Notification/0001-server-Implement-socket-specific-ioctl-routine.patch
-	$(PATCH) < server-Address_Change_Notification/0002-server-Add-socket-side-support-for-the-interface-cha.patch
-	$(PATCH) < server-Address_Change_Notification/0003-server-Add-blocked-support-for-SIO_ADDRESS_LIST_CHAN.patch
-	$(PATCH) < server-Address_Change_Notification/0004-server-Implement-the-interface-change-notification-o.patch
-	$(PATCH) < server-Address_Change_Notification/0005-ws2_32-Add-an-interactive-test-for-interface-change-.patch
+	$(call APPLY_FILE,server-Address_Change_Notification/0001-server-Implement-socket-specific-ioctl-routine.patch)
+	$(call APPLY_FILE,server-Address_Change_Notification/0002-server-Add-socket-side-support-for-the-interface-cha.patch)
+	$(call APPLY_FILE,server-Address_Change_Notification/0003-server-Add-blocked-support-for-SIO_ADDRESS_LIST_CHAN.patch)
+	$(call APPLY_FILE,server-Address_Change_Notification/0004-server-Implement-the-interface-change-notification-o.patch)
+	$(call APPLY_FILE,server-Address_Change_Notification/0005-ws2_32-Add-an-interactive-test-for-interface-change-.patch)
 	@( \
 		echo '+    { "server-Address_Change_Notification", "Erich E. Hoover", "Implement SIO_ADDRESS_LIST_CHANGE. [rev 2]" },'; \
 	) > server-Address_Change_Notification.ok
@@ -437,10 +580,10 @@ server-Address_Change_Notification.ok:
 # |
 .INTERMEDIATE: server-CreateProcess_ACLs.ok
 server-CreateProcess_ACLs.ok:
-	$(PATCH) < server-CreateProcess_ACLs/0001-server-A-new-function-set_sd_defaults_from_token-try.patch
-	$(PATCH) < server-CreateProcess_ACLs/0002-server-Support-sending-process-and-thread-security-d.patch
-	$(PATCH) < server-CreateProcess_ACLs/0003-server-implement-passing-a-process-security-descript.patch
-	$(PATCH) < server-CreateProcess_ACLs/0004-server-implement-passing-a-thread-security-descripto.patch
+	$(call APPLY_FILE,server-CreateProcess_ACLs/0001-server-A-new-function-set_sd_defaults_from_token-tha.patch)
+	$(call APPLY_FILE,server-CreateProcess_ACLs/0002-server-Support-sending-process-and-thread-security-d.patch)
+	$(call APPLY_FILE,server-CreateProcess_ACLs/0003-server-implement-passing-a-process-security-descript.patch)
+	$(call APPLY_FILE,server-CreateProcess_ACLs/0004-server-implement-passing-a-thread-security-descripto.patch)
 	@( \
 		echo '+    { "server-CreateProcess_ACLs", "Joris van der Wel", "Implement passing ACLs to CreateProcess." },'; \
 	) > server-CreateProcess_ACLs.ok
@@ -458,8 +601,8 @@ server-CreateProcess_ACLs.ok:
 # |
 .INTERMEDIATE: server-Inherited_ACLs.ok
 server-Inherited_ACLs.ok: server-Stored_ACLs.ok
-	$(PATCH) < server-Inherited_ACLs/0001-server-Inherit-security-attributes-from-parent-direc.patch
-	$(PATCH) < server-Inherited_ACLs/0002-server-Inherit-security-attributes-from-parent-direc.patch
+	$(call APPLY_FILE,server-Inherited_ACLs/0001-server-Inherit-security-attributes-from-parent-direc.patch)
+	$(call APPLY_FILE,server-Inherited_ACLs/0002-server-Inherit-security-attributes-from-parent-direc.patch)
 	@( \
 		echo '+    { "server-Inherited_ACLs", "Erich E. Hoover", "Add support for inherited security attributes. [rev 6]" },'; \
 	) > server-Inherited_ACLs.ok
@@ -477,8 +620,8 @@ server-Inherited_ACLs.ok: server-Stored_ACLs.ok
 # |
 .INTERMEDIATE: server-Misc_ACL.ok
 server-Misc_ACL.ok:
-	$(PATCH) < server-Misc_ACL/0001-server-Add-default-security-descriptor-ownership-for.patch
-	$(PATCH) < server-Misc_ACL/0002-server-Add-default-security-descriptor-DACL-for-proc.patch
+	$(call APPLY_FILE,server-Misc_ACL/0001-server-Add-default-security-descriptor-ownership-for.patch)
+	$(call APPLY_FILE,server-Misc_ACL/0002-server-Add-default-security-descriptor-DACL-for-proc.patch)
 	@( \
 		echo '+    { "server-Misc_ACL", "Erich E. Hoover", "Add default security descriptor ownership and DACLs for processes." },'; \
 	) > server-Misc_ACL.ok
@@ -496,12 +639,12 @@ server-Misc_ACL.ok:
 # |
 .INTERMEDIATE: server-Stored_ACLs.ok
 server-Stored_ACLs.ok:
-	$(PATCH) < server-Stored_ACLs/0001-server-Unify-the-storage-of-security-attributes-for-.patch
-	$(PATCH) < server-Stored_ACLs/0002-server-Unify-the-retrieval-of-security-attributes-fo.patch
-	$(PATCH) < server-Stored_ACLs/0003-server-Store-file-security-attributes-with-extended-.patch
-	$(PATCH) < server-Stored_ACLs/0004-server-Store-user-and-group-inside-stored-extended-f.patch
-	$(PATCH) < server-Stored_ACLs/0005-server-Retrieve-file-security-attributes-with-extend.patch
-	$(PATCH) < server-Stored_ACLs/0006-server-Convert-return-of-file-security-masks-with-ge.patch
+	$(call APPLY_FILE,server-Stored_ACLs/0001-server-Unify-the-storage-of-security-attributes-for-.patch)
+	$(call APPLY_FILE,server-Stored_ACLs/0002-server-Unify-the-retrieval-of-security-attributes-fo.patch)
+	$(call APPLY_FILE,server-Stored_ACLs/0003-server-Store-file-security-attributes-with-extended-.patch)
+	$(call APPLY_FILE,server-Stored_ACLs/0004-server-Store-user-and-group-inside-stored-extended-f.patch)
+	$(call APPLY_FILE,server-Stored_ACLs/0005-server-Retrieve-file-security-attributes-with-extend.patch)
+	$(call APPLY_FILE,server-Stored_ACLs/0006-server-Convert-return-of-file-security-masks-with-ge.patch)
 	@( \
 		echo '+    { "server-Stored_ACLs", "Erich E. Hoover", "Store and return security attributes with extended file attributes. [rev 6]" },'; \
 	) > server-Stored_ACLs.ok
@@ -516,7 +659,7 @@ server-Stored_ACLs.ok:
 # |
 .INTERMEDIATE: shell32-Default_Folder_ACLs.ok
 shell32-Default_Folder_ACLs.ok:
-	$(PATCH) < shell32-Default_Folder_ACLs/0001-shell32-Set-the-default-security-attributes-for-user.patch
+	$(call APPLY_FILE,shell32-Default_Folder_ACLs/0001-shell32-Set-the-default-security-attributes-for-user.patch)
 	@( \
 		echo '+    { "shell32-Default_Folder_ACLs", "Erich E. Hoover", "Generate default ACLs for user shell folders. [rev 6]" },'; \
 	) > shell32-Default_Folder_ACLs.ok
@@ -534,30 +677,28 @@ shell32-Default_Folder_ACLs.ok:
 # |
 .INTERMEDIATE: shell32-Icons.ok
 shell32-Icons.ok:
-	$(PATCH) < shell32-Icons/0001-shell32-Add-support-for-extra-large-and-jumbo-icon-l.patch
+	$(call APPLY_FILE,shell32-Icons/0001-shell32-Add-support-for-extra-large-and-jumbo-icon-l.patch)
 	@( \
 		echo '+    { "shell32-Icons", "Michael Müller", "Add support for extra large and jumbo icon lists in shell32." },'; \
 	) > shell32-Icons.ok
 
-# Patchset shell32-Register_Folders
+# Patchset shell32-RunDLL_CallEntry16
 # |
 # | Included patches:
-# |   *	Create additional profile directories available in vista and above. [rev 2, by Michael Müller]
+# |   *	Manually relay RunDLL_CallEntry16 to make Tages Protection v5 happy. [by Michael Müller]
 # |
 # | This patchset fixes the following Wine bugs:
-# |   *	[#22896] Multiple applications and games need support for shell32 FOLDERID_LocalAppDataLow (.NET based Unity Engine
-# | 	games, Java JRE 6 in Vista mode)
-# |   *	[#28312] Assassin's Creed Brotherhood v1.03 needs "Saved Games" folder
+# |   *	[#23033] Tages Protection v5.x: games report "DLL not found shell.dll16.dll" (Runaway 2: The Dream Of The Turtle, ...)
 # |
 # | Modified files: 
-# |   *	dlls/shell32/shellpath.c, include/shlobj.h
+# |   *	dlls/shell32/control.c, dlls/shell32/shell32.spec
 # |
-.INTERMEDIATE: shell32-Register_Folders.ok
-shell32-Register_Folders.ok:
-	$(PATCH) < shell32-Register_Folders/0001-shell32-Create-profile-directories-available-in-Vist.patch
+.INTERMEDIATE: shell32-RunDLL_CallEntry16.ok
+shell32-RunDLL_CallEntry16.ok:
+	$(call APPLY_FILE,shell32-RunDLL_CallEntry16/0001-shell32-Use-manual-redirection-for-RunDLL_CallEntry1.patch)
 	@( \
-		echo '+    { "shell32-Register_Folders", "Michael Müller", "Create additional profile directories available in vista and above. [rev 2]" },'; \
-	) > shell32-Register_Folders.ok
+		echo '+    { "shell32-RunDLL_CallEntry16", "Michael Müller", "Manually relay RunDLL_CallEntry16 to make Tages Protection v5 happy." },'; \
+	) > shell32-RunDLL_CallEntry16.ok
 
 # Patchset shell32-SHCreateSessionKey
 # |
@@ -572,7 +713,7 @@ shell32-Register_Folders.ok:
 # |
 .INTERMEDIATE: shell32-SHCreateSessionKey.ok
 shell32-SHCreateSessionKey.ok:
-	$(PATCH) < shell32-SHCreateSessionKey/0001-shell32-Implement-SHCreateSessionKey.patch
+	$(call APPLY_FILE,shell32-SHCreateSessionKey/0001-shell32-Implement-SHCreateSessionKey.patch)
 	@( \
 		echo '+    { "shell32-SHCreateSessionKey", "Dmitry Timoshkov", "shell32: Implement SHCreateSessionKey." },'; \
 	) > shell32-SHCreateSessionKey.ok
@@ -587,34 +728,11 @@ shell32-SHCreateSessionKey.ok:
 # |
 .INTERMEDIATE: shlwapi-UrlCombine.ok
 shlwapi-UrlCombine.ok:
-	$(PATCH) < shlwapi-UrlCombine/0001-shlwapi-tests-Add-additional-tests-for-UrlCombine-and-.patch
-	$(PATCH) < shlwapi-UrlCombine/0002-shlwapi-UrlCombineW-workaround-for-relative-paths.patch
+	$(call APPLY_FILE,shlwapi-UrlCombine/0001-shlwapi-tests-Add-additional-tests-for-UrlCombine-and-.patch)
+	$(call APPLY_FILE,shlwapi-UrlCombine/0002-shlwapi-UrlCombineW-workaround-for-relative-paths.patch)
 	@( \
 		echo '+    { "shlwapi-UrlCombine", "Sebastian Lackner", "Workaround for broken implementation of shlwapi url functions." },'; \
 	) > shlwapi-UrlCombine.ok
-
-# Patchset strmbase-Lock_Race_Conditions
-# |
-# | Included patches:
-# |   *	Fix possible race conditions in strmbase/quartz. [by Erich E. Hoover]
-# |
-# | This patchset fixes the following Wine bugs:
-# |   *	[#31566] Fallout 3: regression causes block at critical section when radio is enabled
-# |
-# | Modified files: 
-# |   *	dlls/quartz/dsoundrender.c, dlls/quartz/videorenderer.c, dlls/strmbase/renderer.c
-# |
-.INTERMEDIATE: strmbase-Lock_Race_Conditions.ok
-strmbase-Lock_Race_Conditions.ok:
-	$(PATCH) < strmbase-Lock_Race_Conditions/0001-strmbase-Fix-race-condition-on-InputPin_BeginFlush-b.patch
-	$(PATCH) < strmbase-Lock_Race_Conditions/0002-strmbase-Fix-race-condition-on-InputPin_EndFlush-bet.patch
-	$(PATCH) < strmbase-Lock_Race_Conditions/0003-strmbase-Fix-race-condition-on-InputPin_EndOfStream-.patch
-	$(PATCH) < strmbase-Lock_Race_Conditions/0004-quartz-Fix-race-condition-on-EndOfStream-between-csR.patch
-	$(PATCH) < strmbase-Lock_Race_Conditions/0005-quartz-Fix-race-condition-on-EndFlush-between-csRend.patch
-	$(PATCH) < strmbase-Lock_Race_Conditions/0006-quartz-Fix-race-condition-between-EndOfStream-and-Pa.patch
-	@( \
-		echo '+    { "strmbase-Lock_Race_Conditions", "Erich E. Hoover", "Fix possible race conditions in strmbase/quartz." },'; \
-	) > strmbase-Lock_Race_Conditions.ok
 
 # Patchset user32-GetSystemMetrics
 # |
@@ -629,7 +747,7 @@ strmbase-Lock_Race_Conditions.ok:
 # |
 .INTERMEDIATE: user32-GetSystemMetrics.ok
 user32-GetSystemMetrics.ok:
-	$(PATCH) < user32-GetSystemMetrics/0001-user32-Allow-changing-the-tablet-media-center-status.patch
+	$(call APPLY_FILE,user32-GetSystemMetrics/0001-user32-Allow-changing-the-tablet-media-center-status.patch)
 	@( \
 		echo '+    { "user32-GetSystemMetrics", "Michael Müller", "Allow changing the tablet / media center status via wine registry key." },'; \
 	) > user32-GetSystemMetrics.ok
@@ -647,11 +765,30 @@ user32-GetSystemMetrics.ok:
 # |
 .INTERMEDIATE: user32-GetTipText.ok
 user32-GetTipText.ok:
-	$(PATCH) < user32-GetTipText/0001-Fix-TOOLTIPS_GetTipText-when-a-resource-cannot-be-fo.patch
-	$(PATCH) < user32-GetTipText/0002-Fix-TOOLTIPS_GetTipText-when-a-NULL-instance-is-used.patch
+	$(call APPLY_FILE,user32-GetTipText/0001-Fix-TOOLTIPS_GetTipText-when-a-resource-cannot-be-fo.patch)
+	$(call APPLY_FILE,user32-GetTipText/0002-Fix-TOOLTIPS_GetTipText-when-a-NULL-instance-is-used.patch)
 	@( \
 		echo '+    { "user32-GetTipText", "Erich E. Hoover", "Handle TOOLTIPS_GetTipText edge cases." },'; \
 	) > user32-GetTipText.ok
+
+# Patchset user32-WndProc
+# |
+# | Included patches:
+# |   *	Workaround for programs leaking wndproc splots. [by Sebastian Lackner]
+# |
+# | This patchset fixes the following Wine bugs:
+# |   *	[#32451] Multiple GOG.com installer bundles show a broken/unresponsive dialog window during installation (installer
+# | 	process running out of wndproc slots)
+# |
+# | Modified files: 
+# |   *	dlls/user32/winproc.c
+# |
+.INTERMEDIATE: user32-WndProc.ok
+user32-WndProc.ok:
+	$(call APPLY_FILE,user32-WndProc/0001-user32-Increase-MAX_WINPROCS-to-16384.patch)
+	@( \
+		echo '+    { "user32-WndProc", "Sebastian Lackner", "Workaround for programs leaking wndproc splots." },'; \
+	) > user32-WndProc.ok
 
 # Patchset wineboot-HKEY_DYN_DATA
 # |
@@ -667,7 +804,7 @@ user32-GetTipText.ok:
 # |
 .INTERMEDIATE: wineboot-HKEY_DYN_DATA.ok
 wineboot-HKEY_DYN_DATA.ok:
-	$(PATCH) < wineboot-HKEY_DYN_DATA/0001-wineboot-Add-some-generic-hardware-in-HKEY_DYN_DATA-.patch
+	$(call APPLY_FILE,wineboot-HKEY_DYN_DATA/0001-wineboot-Add-some-generic-hardware-in-HKEY_DYN_DATA-.patch)
 	@( \
 		echo '+    { "wineboot-HKEY_DYN_DATA", "Michael Müller", "Add some generic hardware in HKEY_DYN_DATA\\\\Config Manager\\\\Enum." },'; \
 	) > wineboot-HKEY_DYN_DATA.ok
@@ -687,36 +824,52 @@ wineboot-HKEY_DYN_DATA.ok:
 # |
 .INTERMEDIATE: winepulse-PulseAudio_Support.ok
 winepulse-PulseAudio_Support.ok:
-	$(PATCH) < winepulse-PulseAudio_Support/0001-winmm-Load-winealsa-if-winepulse-is-found.patch
-	$(PATCH) < winepulse-PulseAudio_Support/0002-winepulse-Add-initial-stub-for-pulseaudio-support.patch
-	$(PATCH) < winepulse-PulseAudio_Support/0003-winepulse-Add-format-and-period-probing.patch
-	$(PATCH) < winepulse-PulseAudio_Support/0004-winepulse-Add-audioclient.patch
-	$(PATCH) < winepulse-PulseAudio_Support/0005-winepulse-Add-IAudioRenderClient-and-IAudioCaptureCl.patch
-	$(PATCH) < winepulse-PulseAudio_Support/0006-winepulse-Add-IAudioClock-and-IAudioClock2.patch
-	$(PATCH) < winepulse-PulseAudio_Support/0007-winepulse-Add-audiostreamvolume.patch
-	$(PATCH) < winepulse-PulseAudio_Support/0008-winepulse-Add-session-support.patch
-	$(PATCH) < winepulse-PulseAudio_Support/0009-fix-fdels-trailing-whitespaces.patch
-	$(PATCH) < winepulse-PulseAudio_Support/0010-winepulse-v12.patch
-	$(PATCH) < winepulse-PulseAudio_Support/0011-winepulse-v15-Add-support-for-missing-formats-and-si.patch
-	$(PATCH) < winepulse-PulseAudio_Support/0012-winepulse-v16-Add-official-warning-wine-doesn-t-want.patch
-	$(PATCH) < winepulse-PulseAudio_Support/0013-winepulse-v17-Fix-winmm-tests.patch
-	$(PATCH) < winepulse-PulseAudio_Support/0014-winepulse-v18-Latency-and-compilation-improvements.patch
-	$(PATCH) < winepulse-PulseAudio_Support/0015-winepulse-API-Compatibility-with-1.5.2-onward-v2.patch
-	$(PATCH) < winepulse-PulseAudio_Support/0016-winepulse-Fix-low-latency-support.patch
-	$(PATCH) < winepulse-PulseAudio_Support/0017-winepulse-drop-realtime-priority-before-thread-destr.patch
-	$(PATCH) < winepulse-PulseAudio_Support/0018-winepulse-remove-bogus-SetEvent-from-pulse_started_c.patch
-	$(PATCH) < winepulse-PulseAudio_Support/0019-winepulse-disable-the-setevent-part-of-the-latency-h.patch
-	$(PATCH) < winepulse-PulseAudio_Support/0020-winepulse-v20-fix-the-checks-in-IsFormatSupported.patch
-	$(PATCH) < winepulse-PulseAudio_Support/0021-winepulse-fixup-IsFormatSupported-calls.patch
-	$(PATCH) < winepulse-PulseAudio_Support/0022-winepulse-v21-return-early-if-padding-didn-t-update.patch
-	$(PATCH) < winepulse-PulseAudio_Support/0023-winepulse-fix-unneeded-free-in-write.patch
-	$(PATCH) < winepulse-PulseAudio_Support/0024-winepulse-v23-fixup-a-invalid-free-in-mmdevapi.patch
-	$(PATCH) < winepulse-PulseAudio_Support/0025-winepulse-use-a-pi-mutex-for-serialization.patch
-	$(PATCH) < winepulse-PulseAudio_Support/0026-winepulse-add-support-for-IMarshal.patch
-	$(PATCH) < winepulse-PulseAudio_Support/0027-winepulse-handle-stream-create-failing-correctly.patch
+	$(call APPLY_FILE,winepulse-PulseAudio_Support/0001-winmm-Load-winealsa-if-winepulse-is-found.patch)
+	$(call APPLY_FILE,winepulse-PulseAudio_Support/0002-winepulse-Add-initial-stub-for-pulseaudio-support.patch)
+	$(call APPLY_FILE,winepulse-PulseAudio_Support/0003-winepulse-Add-format-and-period-probing.patch)
+	$(call APPLY_FILE,winepulse-PulseAudio_Support/0004-winepulse-Add-audioclient.patch)
+	$(call APPLY_FILE,winepulse-PulseAudio_Support/0005-winepulse-Add-IAudioRenderClient-and-IAudioCaptureCl.patch)
+	$(call APPLY_FILE,winepulse-PulseAudio_Support/0006-winepulse-Add-IAudioClock-and-IAudioClock2.patch)
+	$(call APPLY_FILE,winepulse-PulseAudio_Support/0007-winepulse-Add-audiostreamvolume.patch)
+	$(call APPLY_FILE,winepulse-PulseAudio_Support/0008-winepulse-Add-session-support.patch)
+	$(call APPLY_FILE,winepulse-PulseAudio_Support/0009-fix-fdels-trailing-whitespaces.patch)
+	$(call APPLY_FILE,winepulse-PulseAudio_Support/0010-winepulse-v12.patch)
+	$(call APPLY_FILE,winepulse-PulseAudio_Support/0011-winepulse-v15-Add-support-for-missing-formats-and-si.patch)
+	$(call APPLY_FILE,winepulse-PulseAudio_Support/0012-winepulse-v16-Add-official-warning-wine-doesn-t-want.patch)
+	$(call APPLY_FILE,winepulse-PulseAudio_Support/0013-winepulse-v17-Fix-winmm-tests.patch)
+	$(call APPLY_FILE,winepulse-PulseAudio_Support/0014-winepulse-v18-Latency-and-compilation-improvements.patch)
+	$(call APPLY_FILE,winepulse-PulseAudio_Support/0015-winepulse-API-Compatibility-with-1.5.2-onward-v2.patch)
+	$(call APPLY_FILE,winepulse-PulseAudio_Support/0016-winepulse-Fix-low-latency-support.patch)
+	$(call APPLY_FILE,winepulse-PulseAudio_Support/0017-winepulse-drop-realtime-priority-before-thread-destr.patch)
+	$(call APPLY_FILE,winepulse-PulseAudio_Support/0018-winepulse-remove-bogus-SetEvent-from-pulse_started_c.patch)
+	$(call APPLY_FILE,winepulse-PulseAudio_Support/0019-winepulse-disable-the-setevent-part-of-the-latency-h.patch)
+	$(call APPLY_FILE,winepulse-PulseAudio_Support/0020-winepulse-v20-fix-the-checks-in-IsFormatSupported.patch)
+	$(call APPLY_FILE,winepulse-PulseAudio_Support/0021-winepulse-fixup-IsFormatSupported-calls.patch)
+	$(call APPLY_FILE,winepulse-PulseAudio_Support/0022-winepulse-v21-return-early-if-padding-didn-t-update.patch)
+	$(call APPLY_FILE,winepulse-PulseAudio_Support/0023-winepulse-fix-unneeded-free-in-write.patch)
+	$(call APPLY_FILE,winepulse-PulseAudio_Support/0024-winepulse-v23-fixup-a-invalid-free-in-mmdevapi.patch)
+	$(call APPLY_FILE,winepulse-PulseAudio_Support/0025-winepulse-use-a-pi-mutex-for-serialization.patch)
+	$(call APPLY_FILE,winepulse-PulseAudio_Support/0026-winepulse-add-support-for-IMarshal.patch)
+	$(call APPLY_FILE,winepulse-PulseAudio_Support/0027-winepulse-handle-stream-create-failing-correctly.patch)
 	@( \
 		echo '+    { "winepulse-PulseAudio_Support", "Maarten Lankhorst", "Winepulse patches extracted from https://launchpad.net/~ubuntu-wine/+archive/ubuntu/ppa/+files/wine1.7_1.7.22-0ubuntu1.debian.tar.gz. [rev 4]" },'; \
 	) > winepulse-PulseAudio_Support.ok
+
+# Patchset winex11-Limited_Resolutions
+# |
+# | Included patches:
+# |   *	Update the check for broken nVidia RandR to test for the number of resolutions instead of the number of modes. [by Erich
+# | 	E. Hoover]
+# |
+# | Modified files: 
+# |   *	dlls/winex11.drv/xrandr.c
+# |
+.INTERMEDIATE: winex11-Limited_Resolutions.ok
+winex11-Limited_Resolutions.ok:
+	$(call APPLY_FILE,winex11-Limited_Resolutions/0001-winex11.drv-Update-the-check-for-broken-nVidia-RandR.patch)
+	@( \
+		echo '+    { "winex11-Limited_Resolutions", "Erich E. Hoover", "Update the check for broken nVidia RandR to test for the number of resolutions instead of the number of modes." },'; \
+	) > winex11-Limited_Resolutions.ok
 
 # Patchset winex11-XEMBED
 # |
@@ -729,8 +882,8 @@ winepulse-PulseAudio_Support.ok:
 # |
 .INTERMEDIATE: winex11-XEMBED.ok
 winex11-XEMBED.ok:
-	$(PATCH) < winex11-XEMBED/0001-winex11-Update-gl_drawable-for-embedded-windows.patch
-	$(PATCH) < winex11-XEMBED/0002-winex11-Enable-disable-windows-when-they-are-un-mapped.patch
+	$(call APPLY_FILE,winex11-XEMBED/0001-winex11-Update-gl_drawable-for-embedded-windows.patch)
+	$(call APPLY_FILE,winex11-XEMBED/0002-winex11-Enable-disable-windows-when-they-are-un-mapped.patch)
 	@( \
 		echo '+    { "winex11-XEMBED", "Sebastian Lackner", "Enable/disable windows when they are (un)mapped by foreign applications." },'; \
 		echo '+    { "winex11-XEMBED", "Sebastian Lackner", "Update gl_drawable for embedded windows." },'; \
@@ -746,8 +899,8 @@ winex11-XEMBED.ok:
 # |
 .INTERMEDIATE: ws2_32-Connect_Time.ok
 ws2_32-Connect_Time.ok:
-	$(PATCH) < ws2_32-Connect_Time/0001-server-Store-the-time-of-the-socket-connection.patch
-	$(PATCH) < ws2_32-Connect_Time/0002-ws2_32-Properly-implement-SO_CONNECT_TIME.patch
+	$(call APPLY_FILE,ws2_32-Connect_Time/0001-server-Store-the-time-of-the-socket-connection.patch)
+	$(call APPLY_FILE,ws2_32-Connect_Time/0002-ws2_32-Properly-implement-SO_CONNECT_TIME.patch)
 	@( \
 		echo '+    { "ws2_32-Connect_Time", "Bruno Jesus / Erich E. Hoover", "Return the appropriate connection time with SO_CONNECT_TIME." },'; \
 	) > ws2_32-Connect_Time.ok
@@ -766,11 +919,11 @@ ws2_32-Connect_Time.ok:
 # |
 .INTERMEDIATE: ws2_32-TransmitFile.ok
 ws2_32-TransmitFile.ok:
-	$(PATCH) < ws2_32-TransmitFile/0001-ws2_32-Add-stub-for-TransmitFile.patch
-	$(PATCH) < ws2_32-TransmitFile/0002-ws2_32-Check-for-invalid-parameters-in-TransmitFile.patch
-	$(PATCH) < ws2_32-TransmitFile/0003-ws2_32-Implement-a-basic-synchronous-TransmitFile.patch
-	$(PATCH) < ws2_32-TransmitFile/0004-ws2_32-Add-asynchronous-support-for-TransmitFile.patch
-	$(PATCH) < ws2_32-TransmitFile/0005-ws2_32-Add-support-for-TF_DISCONNECT-and-TF_REUSE_SO.patch
+	$(call APPLY_FILE,ws2_32-TransmitFile/0001-ws2_32-Add-stub-for-TransmitFile.patch)
+	$(call APPLY_FILE,ws2_32-TransmitFile/0002-ws2_32-Check-for-invalid-parameters-in-TransmitFile.patch)
+	$(call APPLY_FILE,ws2_32-TransmitFile/0003-ws2_32-Implement-a-basic-synchronous-TransmitFile.patch)
+	$(call APPLY_FILE,ws2_32-TransmitFile/0004-ws2_32-Add-asynchronous-support-for-TransmitFile.patch)
+	$(call APPLY_FILE,ws2_32-TransmitFile/0005-ws2_32-Add-support-for-TF_DISCONNECT-and-TF_REUSE_SO.patch)
 	@( \
 		echo '+    { "ws2_32-TransmitFile", "Erich E. Hoover", "Implement TransmitFile." },'; \
 	) > ws2_32-TransmitFile.ok
@@ -788,7 +941,7 @@ ws2_32-TransmitFile.ok:
 # |
 .INTERMEDIATE: ws2_32-inet_pton.ok
 ws2_32-inet_pton.ok:
-	$(PATCH) < ws2_32-inet_pton/0001-ws2_32-Implement-inet_pton.patch
+	$(call APPLY_FILE,ws2_32-inet_pton/0001-ws2_32-Implement-inet_pton.patch)
 	@( \
 		echo '+    { "ws2_32-inet_pton", "Bruno Jesus", "Implement ws2_32.inet_pton." },'; \
 	) > ws2_32-inet_pton.ok
@@ -807,7 +960,7 @@ ws2_32-inet_pton.ok:
 # |
 .INTERMEDIATE: wtsapi32-EnumerateProcesses.ok
 wtsapi32-EnumerateProcesses.ok:
-	$(PATCH) < wtsapi32-EnumerateProcesses/0001-wtsapi32-Partial-implementation-of-WTSEnumerateProce.patch
+	$(call APPLY_FILE,wtsapi32-EnumerateProcesses/0001-wtsapi32-Partial-implementation-of-WTSEnumerateProce.patch)
 	@( \
 		echo '+    { "wtsapi32-EnumerateProcesses", "Sebastian Lackner", "Partial implementation of WTSEnumerateProcessesW." },'; \
 	) > wtsapi32-EnumerateProcesses.ok

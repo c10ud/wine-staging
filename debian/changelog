@@ -1,17 +1,36 @@
-wine-compholio (1.7.24) UNRELEASED; urgency=low
+wine-compholio (1.7.25) UNRELEASED; urgency=low
+  * Added Courier Prime (OFLv1.1) as a Courier New replacement.
+  * Added patch to better detect broken nVidia RandR 1.2 support.
+ -- Erich E. Hoover <erich.e.hoover@gmail.com>  Sat, 09 Aug 2014 13:21:27 -0600
+
+wine-compholio (1.7.24) unstable; urgency=low
+  * Various further improvements to the patch system.
   * Added patch to implement inet_pton.
   * Added patch to implement GetSystemTimes.
   * Added patch to implement SHCreateSessionKey.
-  * Added patch to create AppData\LocalLow directory.
+  * Added patch to create directory available on Vista and later.
   * Added patch to fix edge cases in TOOLTIPS_GetTipText.
   * Added patch to allow special characters in pipe names.
   * Added patch with stubs for [Get|Set]SystemFileCacheSize.
   * Added patch to implement AllocateAndGetTcpExTableFromStack.
+  * Added patch to support setting file disposition information.
   * Added patch to fix ConnectNamedPort return value in overlapped mode.
   * Added patch to store IOCS data in a property instead of GWLP_USERDATA.
   * Added patch to return empty D3D hardware flags for HEL device enumeration.
   * Added patch to return the appropriate connection time with SO_CONNECT_TIME.
- -- Erich E. Hoover <erich.e.hoover@gmail.com>  Wed, 30 Jul 2014 17:40:14 -0600
+  * Added patch to support extra large and jumbo icons.
+  * Added patch to allow setting tablet / media center status via registry.
+  * Added patch to use manual redirection for RunDLL_CallEntry16.
+  * Added patch to set ldr.EntryPoint for main executable.
+  * Added patch to fix invalid memory access in windowscodecs/PropertyBag.
+  * Added patch to use a linear resampler when there a large number of dsound mixing buffers.
+  * Added patch to fix comparison of punctuation characters in lstrcmp.
+  * Added patch to workaround programs leaking wndproc splots.
+  * Added patch to implement ITextRange, ITextFont and ITextPara.
+  * Removed patch to create Vista directories (accepted upstream).
+  * Removed strmbase/quartz locking fix patches (accepted upstream).
+  * Removed windowscodecs/PropertyBag patch (accepted upstream).
+ -- Erich E. Hoover <erich.e.hoover@gmail.com>  Fri, 08 Aug 2014 22:06:07 -0600
 
 wine-compholio (1.7.23) unstable; urgency=low
   * Rewrite of patch system to simplify maintaining large patchsets.
