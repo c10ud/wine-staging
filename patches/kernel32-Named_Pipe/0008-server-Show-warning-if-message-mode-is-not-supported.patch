@@ -1,4 +1,4 @@
-From e73e02b34a31326c67ba0b0d9aa7fa44cdca1946 Mon Sep 17 00:00:00 2001
+From 3f4b6f6f72be7a15be544a25dbec286f844903ba Mon Sep 17 00:00:00 2001
 From: Sebastian Lackner <sebastian@fds-team.de>
 Date: Mon, 4 Aug 2014 00:29:26 +0200
 Subject: server: Show warning if message mode is not supported.
@@ -13,7 +13,7 @@ missing message mode support.
  3 files changed, 13 insertions(+), 4 deletions(-)
 
 diff --git a/dlls/ntdll/file.c b/dlls/ntdll/file.c
-index d2efcc1..e70289b 100644
+index d2efcc1..46b3937 100644
 --- a/dlls/ntdll/file.c
 +++ b/dlls/ntdll/file.c
 @@ -3003,6 +3003,7 @@ NTSTATUS WINAPI NtCreateNamedPipeFile( PHANDLE handle, ULONG access,
@@ -47,12 +47,11 @@ index d2efcc1..e70289b 100644
          req->maxinstances = max_inst;
          req->outsize = outbound_quota;
          req->insize  = inbound_quota;
-@@ -3031,9 +3033,14 @@ NTSTATUS WINAPI NtCreateNamedPipeFile( PHANDLE handle, ULONG access,
-         wine_server_add_data( req, attr->ObjectName->Buffer,
+@@ -3032,8 +3034,13 @@ NTSTATUS WINAPI NtCreateNamedPipeFile( PHANDLE handle, ULONG access,
                                attr->ObjectName->Length );
          status = wine_server_call( req );
-+        flags &= ~reply->flags;
          if (!status) *handle = wine_server_ptr_handle( reply->handle );
++        flags &= ~reply->flags; /* contains now all unsupported flags */
      }
      SERVER_END_REQ;
 +

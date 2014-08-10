@@ -1,15 +1,18 @@
-From 4def7948832423c68173fea8d3cc755fcbd274cf Mon Sep 17 00:00:00 2001
+From 9d078845ac266e332ac1abf6f2cbd4f157717875 Mon Sep 17 00:00:00 2001
 From: Sebastian Lackner <sebastian@fds-team.de>
 Date: Wed, 30 Jul 2014 21:52:38 +0200
 Subject: kernel32/tests: Add tests for partially received pipe messages
  (ERROR_MORE_DATA).
 
+Changes in v2:
+  * Swap obuf <-> obuf2 to ensure we compare with the right data.
+  * Move new test to the end, ensure that pipe is empty before.
 ---
- dlls/kernel32/tests/pipe.c |  101 ++++++++++++++++++++++++++++++++++++++++++++
- 1 file changed, 101 insertions(+)
+ dlls/kernel32/tests/pipe.c |  108 +++++++++++++++++++++++++++++++++++++++++++-
+ 1 file changed, 107 insertions(+), 1 deletion(-)
 
 diff --git a/dlls/kernel32/tests/pipe.c b/dlls/kernel32/tests/pipe.c
-index c19456e..3357061 100644
+index c19456e..65a4ec4 100644
 --- a/dlls/kernel32/tests/pipe.c
 +++ b/dlls/kernel32/tests/pipe.c
 @@ -127,6 +127,21 @@ static void test_CreateNamedPipe(int pipemode)
@@ -40,17 +43,17 @@ index c19456e..3357061 100644
  
 +        /* Test how ReadFile behaves when the buffer is not big enough for the whole message */
 +        memset(ibuf, 0, sizeof(ibuf));
-+        ok(WriteFile(hnp, obuf, sizeof(obuf), &written, NULL), "WriteFile\n");
-+        ok(written == sizeof(obuf), "write file len\n");
++        ok(WriteFile(hnp, obuf2, sizeof(obuf2), &written, NULL), "WriteFile\n");
++        ok(written == sizeof(obuf2), "write file len\n");
 +        ok(ReadFile(hFile, ibuf, 4, &readden, NULL), "ReadFile\n");
 +        ok(readden == 4, "read got %d bytes\n", readden);
 +        ok(ReadFile(hFile, ibuf + 4, sizeof(ibuf) - 4, &readden, NULL), "ReadFile\n");
-+        ok(readden == sizeof(obuf)-4, "read got %d bytes\n", readden);
-+        ok(memcmp(obuf, ibuf, written) == 0, "content check\n");
++        ok(readden == sizeof(obuf2)-4, "read got %d bytes\n", readden);
++        ok(memcmp(obuf2, ibuf, written) == 0, "content check\n");
 +
 +        memset(ibuf, 0, sizeof(ibuf));
-+        ok(WriteFile(hFile, obuf2, sizeof(obuf2), &written, NULL), "WriteFile\n");
-+        ok(written == sizeof(obuf2), "write file len\n");
++        ok(WriteFile(hFile, obuf, sizeof(obuf), &written, NULL), "WriteFile\n");
++        ok(written == sizeof(obuf), "write file len\n");
 +        if (pipemode == PIPE_TYPE_BYTE)
 +        {
 +            ok(ReadFile(hnp, ibuf, 4, &readden, NULL), "ReadFile\n");
@@ -65,8 +68,8 @@ index c19456e..3357061 100644
 +        }
 +        ok(readden == 4, "read got %d bytes\n", readden);
 +        ok(ReadFile(hnp, ibuf + 4, sizeof(ibuf) - 4, &readden, NULL), "ReadFile\n");
-+        ok(readden == sizeof(obuf2)-4, "read got %d bytes\n", readden);
-+        ok(memcmp(obuf2, ibuf, written) == 0, "content check\n");
++        ok(readden == sizeof(obuf)-4, "read got %d bytes\n", readden);
++        ok(memcmp(obuf, ibuf, written) == 0, "content check\n");
 +
 +        /* Similar to above, but use a read buffer size small enough to read in three parts */
 +        memset(ibuf, 0, sizeof(ibuf));
@@ -100,40 +103,54 @@ index c19456e..3357061 100644
          /* Test reading of multiple writes */
          memset(ibuf, 0, sizeof(ibuf));
          ok(WriteFile(hnp, obuf, sizeof(obuf), &written, NULL), "WriteFile3a\n");
-@@ -222,6 +296,33 @@ static void test_CreateNamedPipe(int pipemode)
-                 ok(SetNamedPipeHandleState(hFile, &lpmode, NULL, NULL), "Change mode\n");
+@@ -238,7 +312,9 @@ static void test_CreateNamedPipe(int pipemode)
              }
-         
+             pbuf = ibuf;
+             ok(memcmp(obuf, pbuf, sizeof(obuf)) == 0, "content 5a check\n");
+-    
++            if (readden <= sizeof(obuf))
++                ok(ReadFile(hFile, ibuf, sizeof(ibuf), &readden, NULL), "ReadFile\n");
++
+             /* Multiple writes in the reverse direction */
+             /* the write of obuf2 from write4 should still be in the buffer */
+             ok(PeekNamedPipe(hnp, ibuf, sizeof(ibuf), &readden, &avail, NULL), "Peek6a\n");
+@@ -268,6 +344,36 @@ static void test_CreateNamedPipe(int pipemode)
+             }
+             pbuf = ibuf;
+             ok(memcmp(obuf, pbuf, sizeof(obuf)) == 0, "content 6a check\n");
++            if (readden <= sizeof(obuf))
++                ok(ReadFile(hnp, ibuf, sizeof(ibuf), &readden, NULL), "ReadFile\n");
++
 +            /* Test how ReadFile behaves when the buffer is not big enough for the whole message */
 +            memset(ibuf, 0, sizeof(ibuf));
-+            ok(WriteFile(hnp, obuf, sizeof(obuf), &written, NULL), "WriteFile\n");
-+            ok(written == sizeof(obuf), "write file len\n");
++            ok(WriteFile(hnp, obuf2, sizeof(obuf2), &written, NULL), "WriteFile 7\n");
++            ok(written == sizeof(obuf2), "write file len 7\n");
 +            SetLastError(0xdeadbeef);
 +            todo_wine
-+            ok(!ReadFile(hFile, ibuf, 4, &readden, NULL), "ReadFile\n");
++            ok(!ReadFile(hFile, ibuf, 4, &readden, NULL), "ReadFile 7\n");
 +            todo_wine
-+            ok(GetLastError() == ERROR_MORE_DATA, "wrong error\n");
-+            ok(readden == 4, "read got %d bytes\n", readden);
-+            ok(ReadFile(hFile, ibuf + 4, sizeof(ibuf) - 4, &readden, NULL), "ReadFile\n");
-+            ok(readden == sizeof(obuf)-4, "read got %d bytes\n", readden);
-+            ok(memcmp(obuf, ibuf, written) == 0, "content check\n");
++            ok(GetLastError() == ERROR_MORE_DATA, "wrong error 7\n");
++            ok(readden == 4, "read got %d bytes 7\n", readden);
++            ok(ReadFile(hFile, ibuf + 4, sizeof(ibuf) - 4, &readden, NULL), "ReadFile 7\n");
++            ok(readden == sizeof(obuf2)-4, "read got %d bytes 7\n", readden);
++            ok(memcmp(obuf2, ibuf, written) == 0, "content check 7\n");
 +
 +            memset(ibuf, 0, sizeof(ibuf));
-+            ok(WriteFile(hFile, obuf2, sizeof(obuf2), &written, NULL), "WriteFile\n");
-+            ok(written == sizeof(obuf2), "write file len\n");
++            ok(WriteFile(hFile, obuf, sizeof(obuf), &written, NULL), "WriteFile 8\n");
++            ok(written == sizeof(obuf), "write file len 8\n");
 +            SetLastError(0xdeadbeef);
 +            todo_wine
-+            ok(!ReadFile(hnp, ibuf, 4, &readden, NULL), "ReadFile\n");
++            ok(!ReadFile(hnp, ibuf, 4, &readden, NULL), "ReadFile 8\n");
 +            todo_wine
-+            ok(GetLastError() == ERROR_MORE_DATA, "wrong error\n");
-+            ok(readden == 4, "read got %d bytes\n", readden);
-+            ok(ReadFile(hnp, ibuf + 4, sizeof(ibuf) - 4, &readden, NULL), "ReadFile\n");
-+            ok(readden == sizeof(obuf2)-4, "read got %d bytes\n", readden);
-+            ok(memcmp(obuf2, ibuf, written) == 0, "content check\n");
++            ok(GetLastError() == ERROR_MORE_DATA, "wrong error 8\n");
++            ok(readden == 4, "read got %d bytes 8\n", readden);
++            ok(ReadFile(hnp, ibuf + 4, sizeof(ibuf) - 4, &readden, NULL), "ReadFile 8\n");
++            ok(readden == sizeof(obuf)-4, "read got %d bytes 8\n", readden);
++            ok(memcmp(obuf, ibuf, written) == 0, "content check 8\n");
 +
-             memset(ibuf, 0, sizeof(ibuf));
-             ok(WriteFile(hnp, obuf, sizeof(obuf), &written, NULL), "WriteFile5a\n");
-             ok(written == sizeof(obuf), "write file len 3a\n");
+         }
+ 
+         /* Picky conformance tests */
 -- 
 1.7.9.5
 

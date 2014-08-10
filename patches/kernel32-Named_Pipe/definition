@@ -4,7 +4,7 @@ Revision: 1
 
 Author: Sebastian Lackner / Erich E. Hoover / Adam Martinson
 Subject: Support for NamedPipe operations via SOCK_SEQPACKET sockets.
-Revision: 2
+Revision: 3
 
 Fixes: [16550] Fix for ConnectNamedPort return value in overlapped mode
 Fixes: [17273] Add implementation for SetNamedPipeHandleState

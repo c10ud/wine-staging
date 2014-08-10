@@ -1,0 +1,70 @@
+From 175ab888d2a5128c1ee721ef2b97a11fc9b43fef Mon Sep 17 00:00:00 2001
+From: Sebastian Lackner <sebastian@fds-team.de>
+Date: Sun, 10 Aug 2014 03:44:34 +0200
+Subject: server: Don't use application buffer size for message mode buffers.
+
+This patch shows one of the few things which is difficult to solve when
+having to use the underling Linux message mode implementation. On Linux
+its not possible to dynamically adjust the buffer size - we always use
+the system default (/proc/sys/net/core/wmem_default) instead of the
+application value, since the application might rely on sending messages
+greater than the pipe buffer size ...
+---
+ dlls/ntdll/file.c   |    4 ++--
+ server/named_pipe.c |   24 ++++++++++++++++--------
+ 2 files changed, 18 insertions(+), 10 deletions(-)
+
+diff --git a/dlls/ntdll/file.c b/dlls/ntdll/file.c
+index 8adea4f..73bc3b6 100644
+--- a/dlls/ntdll/file.c
++++ b/dlls/ntdll/file.c
+@@ -1136,8 +1136,8 @@ NTSTATUS WINAPI NtWriteFile(HANDLE hFile, HANDLE hEvent,
+             {
+                 if (msgsize == (ULONG)-1)
+                 {
+-                    FIXME("Message of size %d is too big and will be truncated\n", length);
+-                    msgsize = (length + 4095) & ~4095;
++                    msgsize = (length + 32 + 4095) & ~4095;
++                    FIXME("Message is too big, try to increase /proc/sys/net/core/wmem_default to at least %d\n", msgsize);
+                 }
+ 
+                 /* FIXME: inefficient loop - max named pipe message size should be cached! */
+diff --git a/server/named_pipe.c b/server/named_pipe.c
+index 9fb79d5..b5202cb 100644
+--- a/server/named_pipe.c
++++ b/server/named_pipe.c
+@@ -864,15 +864,23 @@ static struct object *named_pipe_open_file( struct object *obj, unsigned int acc
+             if (is_overlapped( options )) fcntl( fds[1], F_SETFL, O_NONBLOCK );
+             if (is_overlapped( server->options )) fcntl( fds[0], F_SETFL, O_NONBLOCK );
+ 
+-            if (pipe->insize)
++            /* FIXME: For message mode we don't pay attention to the provided buffer size.
++             * Linux pipes cannot dynamically adjust size, so we leave the size to the system
++             * instead of using the application provided value. Please note that this will
++             * have the effect that the application doesn't block when sending very large
++             * messages. */
++            if (type != SOCK_SEQPACKET)
+             {
+-                setsockopt( fds[0], SOL_SOCKET, SO_RCVBUF, &pipe->insize, sizeof(pipe->insize) );
+-                setsockopt( fds[1], SOL_SOCKET, SO_RCVBUF, &pipe->insize, sizeof(pipe->insize) );
+-            }
+-            if (pipe->outsize)
+-            {
+-                setsockopt( fds[0], SOL_SOCKET, SO_SNDBUF, &pipe->outsize, sizeof(pipe->outsize) );
+-                setsockopt( fds[1], SOL_SOCKET, SO_SNDBUF, &pipe->outsize, sizeof(pipe->outsize) );
++                if (pipe->insize)
++                {
++                    setsockopt( fds[0], SOL_SOCKET, SO_RCVBUF, &pipe->insize, sizeof(pipe->insize) );
++                    setsockopt( fds[1], SOL_SOCKET, SO_RCVBUF, &pipe->insize, sizeof(pipe->insize) );
++                }
++                if (pipe->outsize)
++                {
++                    setsockopt( fds[0], SOL_SOCKET, SO_SNDBUF, &pipe->outsize, sizeof(pipe->outsize) );
++                    setsockopt( fds[1], SOL_SOCKET, SO_SNDBUF, &pipe->outsize, sizeof(pipe->outsize) );
++                }
+             }
+ 
+             if (type != SOCK_SEQPACKET || (setsockopt( fds[0], SOL_SOCKET, SO_PEEK_OFF, &zero, sizeof(zero) ) != -1 &&
+-- 
+1.7.9.5
+

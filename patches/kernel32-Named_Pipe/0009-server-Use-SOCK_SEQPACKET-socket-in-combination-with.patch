@@ -1,4 +1,4 @@
-From 846451671edfd070d80ab951f5c4084ef0a50914 Mon Sep 17 00:00:00 2001
+From e7dd1a77ec81646bffa4fb8b19a03adb3f6d9041 Mon Sep 17 00:00:00 2001
 From: Sebastian Lackner <sebastian@fds-team.de>
 Date: Mon, 4 Aug 2014 05:01:11 +0200
 Subject: server: Use SOCK_SEQPACKET socket in combination with SO_PEEK_OFF to
@@ -7,18 +7,22 @@ Subject: server: Use SOCK_SEQPACKET socket in combination with SO_PEEK_OFF to
 Similar to Windows, when a pipe has been created with message mode flags, then all
 sending operations always behave in "message mode". Currently the read mode isn't
 handled yet, and the default is byte mode, to stay backwards compatible.
+
+Changes in v2:
+  * Show FIXME when message is too big and was splitted
+  * Simplify logic for FSCTL_PIPE_PEEK
 ---
  dlls/kernel32/sync.c       |    2 +-
- dlls/kernel32/tests/pipe.c |    5 --
- dlls/ntdll/file.c          |  114 +++++++++++++++++++++++++++++++++++++++-----
- server/named_pipe.c        |   68 ++++++++++++++++++++------
+ dlls/kernel32/tests/pipe.c |    9 ----
+ dlls/ntdll/file.c          |  104 +++++++++++++++++++++++++++++++++++++++-----
+ server/named_pipe.c        |   68 +++++++++++++++++++++++------
  server/sock.c              |    4 +-
- server/sock.h              |   26 ++++++++++
- 6 files changed, 186 insertions(+), 33 deletions(-)
+ server/sock.h              |   26 +++++++++++
+ 6 files changed, 175 insertions(+), 38 deletions(-)
  create mode 100644 server/sock.h
 
 diff --git a/dlls/kernel32/sync.c b/dlls/kernel32/sync.c
-index 8210624..f9b3903 100644
+index ff0e234..2aaf341 100644
 --- a/dlls/kernel32/sync.c
 +++ b/dlls/kernel32/sync.c
 @@ -1463,7 +1463,7 @@ BOOL WINAPI PeekNamedPipe( HANDLE hPipe, LPVOID lpvBuffer, DWORD cbBuffer,
@@ -31,7 +35,7 @@ index 8210624..f9b3903 100644
      }
      else SetLastError( RtlNtStatusToDosError(status) );
 diff --git a/dlls/kernel32/tests/pipe.c b/dlls/kernel32/tests/pipe.c
-index 3341ca4..ea83760 100644
+index 8e94a07..b918988 100644
 --- a/dlls/kernel32/tests/pipe.c
 +++ b/dlls/kernel32/tests/pipe.c
 @@ -285,7 +285,6 @@ static void test_CreateNamedPipe(int pipemode)
@@ -39,37 +43,63 @@ index 3341ca4..ea83760 100644
              ok(leftmsg == 0, "peek got %d bytes left in message\n", leftmsg);
          else
 -            todo_wine
-             ok(leftmsg == sizeof(obuf) - 4, "peek got %d bytes left in message\n", leftmsg);
+             ok(leftmsg == sizeof(obuf2) - 4, "peek got %d bytes left in message\n", leftmsg);
          ok(ReadFile(hFile, ibuf + 4, sizeof(ibuf) - 4, &readden, NULL), "ReadFile\n");
-         ok(readden == sizeof(obuf)-4, "read got %d bytes\n", readden);
-@@ -460,12 +459,10 @@ static void test_CreateNamedPipe(int pipemode)
+         ok(readden == sizeof(obuf2)-4, "read got %d bytes\n", readden);
+@@ -511,12 +510,10 @@ static void test_CreateNamedPipe(int pipemode)
              readden = leftmsg = -1;
-             ok(PeekNamedPipe(hFile, NULL, 0, NULL, &readden, &leftmsg), "PeekNamedPipe\n");
-             ok(readden == sizeof(obuf) + sizeof(obuf2), "peek got %d bytes total\n", readden);
+             ok(PeekNamedPipe(hFile, NULL, 0, NULL, &readden, &leftmsg), "PeekNamedPipe 9\n");
+             ok(readden == sizeof(obuf) + sizeof(obuf2), "peek got %d bytes total 9\n", readden);
 -            todo_wine
-             ok(leftmsg == sizeof(obuf), "peek got %d bytes left in message\n", leftmsg);
+             ok(leftmsg == sizeof(obuf), "peek got %d bytes left in message 9\n", leftmsg);
              readden = leftmsg = -1;
-             ok(RpcPeekNamedPipe(hFile, NULL, 0, NULL, &readden, &leftmsg), "RpcPeekNamedPipe\n");
-             ok(readden == sizeof(obuf) + sizeof(obuf2), "peek got %d bytes total\n", readden);
+             ok(RpcPeekNamedPipe(hFile, NULL, 0, NULL, &readden, &leftmsg), "RpcPeekNamedPipe 9\n");
+             ok(readden == sizeof(obuf) + sizeof(obuf2), "peek got %d bytes total 9\n", readden);
 -            todo_wine
-             ok(leftmsg == sizeof(obuf), "peek got %d bytes left in message\n", leftmsg);
+             ok(leftmsg == sizeof(obuf), "peek got %d bytes left in message 9\n", leftmsg);
              SetLastError(0xdeadbeef);
              todo_wine
-@@ -483,12 +480,10 @@ static void test_CreateNamedPipe(int pipemode)
+@@ -534,12 +531,10 @@ static void test_CreateNamedPipe(int pipemode)
              readden = leftmsg = -1;
-             ok(PeekNamedPipe(hFile, NULL, 0, NULL, &readden, &leftmsg), "PeekNamedPipe\n");
-             ok(readden == sizeof(obuf) - 8 + sizeof(obuf2), "peek got %d bytes total\n", readden);
+             ok(PeekNamedPipe(hFile, NULL, 0, NULL, &readden, &leftmsg), "PeekNamedPipe 9\n");
+             ok(readden == sizeof(obuf) - 8 + sizeof(obuf2), "peek got %d bytes total 9\n", readden);
 -            todo_wine
-             ok(leftmsg == sizeof(obuf) - 8, "peek got %d bytes left in message\n", leftmsg);
+             ok(leftmsg == sizeof(obuf) - 8, "peek got %d bytes left in message 9\n", leftmsg);
              readden = leftmsg = -1;
-             ok(RpcPeekNamedPipe(hFile, NULL, 0, NULL, &readden, &leftmsg), "RpcPeekNamedPipe\n");
-             ok(readden == sizeof(obuf) - 8 + sizeof(obuf2), "peek got %d bytes total\n", readden);
+             ok(RpcPeekNamedPipe(hFile, NULL, 0, NULL, &readden, &leftmsg), "RpcPeekNamedPipe 9\n");
+             ok(readden == sizeof(obuf) - 8 + sizeof(obuf2), "peek got %d bytes total 9\n", readden);
 -            todo_wine
-             ok(leftmsg == sizeof(obuf) - 8, "peek got %d bytes left in message\n", leftmsg);
+             ok(leftmsg == sizeof(obuf) - 8, "peek got %d bytes left in message 9\n", leftmsg);
              ret = RpcReadFile(hFile, ibuf + 8, sizeof(ibuf), &readden, NULL);
-             ok(ret, "RpcReadFile\n");
+             ok(ret, "RpcReadFile 9\n");
+@@ -600,12 +595,10 @@ static void test_CreateNamedPipe(int pipemode)
+             readden = leftmsg = -1;
+             ok(PeekNamedPipe(hnp, NULL, 0, NULL, &readden, &leftmsg), "PeekNamedPipe 10\n");
+             ok(readden == sizeof(obuf) + sizeof(obuf2), "peek got %d bytes total 10\n", readden);
+-            todo_wine
+             ok(leftmsg == sizeof(obuf2), "peek got %d bytes left in message 10\n", leftmsg);
+             readden = leftmsg = -1;
+             ok(RpcPeekNamedPipe(hnp, NULL, 0, NULL, &readden, &leftmsg), "RpcPeekNamedPipe 10\n");
+             ok(readden == sizeof(obuf) + sizeof(obuf2), "peek got %d bytes total 10\n", readden);
+-            todo_wine
+             ok(leftmsg == sizeof(obuf2), "peek got %d bytes left in message 10\n", leftmsg);
+             SetLastError(0xdeadbeef);
+             todo_wine
+@@ -623,12 +616,10 @@ static void test_CreateNamedPipe(int pipemode)
+             readden = leftmsg = -1;
+             ok(PeekNamedPipe(hnp, NULL, 0, NULL, &readden, &leftmsg), "PeekNamedPipe 10\n");
+             ok(readden == sizeof(obuf2) - 8 + sizeof(obuf), "peek got %d bytes total 10\n", readden);
+-            todo_wine
+             ok(leftmsg == sizeof(obuf2) - 8, "peek got %d bytes left in message 10\n", leftmsg);
+             readden = leftmsg = -1;
+             ok(RpcPeekNamedPipe(hnp, NULL, 0, NULL, &readden, &leftmsg), "RpcPeekNamedPipe 10\n");
+             ok(readden == sizeof(obuf2) - 8 + sizeof(obuf), "peek got %d bytes total 10\n", readden);
+-            todo_wine
+             ok(leftmsg == sizeof(obuf2) - 8, "peek got %d bytes left in message 10\n", leftmsg);
+             ret = RpcReadFile(hnp, ibuf + 8, sizeof(ibuf), &readden, NULL);
+             ok(ret, "RpcReadFile 10\n");
 diff --git a/dlls/ntdll/file.c b/dlls/ntdll/file.c
-index e70289b..d1dff7f 100644
+index 46b3937..8adea4f 100644
 --- a/dlls/ntdll/file.c
 +++ b/dlls/ntdll/file.c
 @@ -76,6 +76,10 @@
@@ -94,7 +124,7 @@ index e70289b..d1dff7f 100644
  
      TRACE("(%p,%p,%p,%p,%p,%p,0x%08x,%p,%p),partial stub!\n",
            hFile,hEvent,apc,apc_user,io_status,buffer,length,offset,key);
-@@ -648,10 +654,49 @@ NTSTATUS WINAPI NtReadFile(HANDLE hFile, HANDLE hEvent,
+@@ -648,10 +654,50 @@ NTSTATUS WINAPI NtReadFile(HANDLE hFile, HANDLE hEvent,
              goto done;
          }
      }
@@ -136,6 +166,7 @@ index e70289b..d1dff7f 100644
 +                iov.iov_len  = sizeof(ret);
 +                ret = recvmsg( unix_handle, &msg, MSG_TRUNC );
 +                if (ret < 0) ERR("failed to dequeue message from message mode pipe\n");
++                msg.msg_flags = 0;
 +            }
 +        }
 +        else
@@ -145,7 +176,7 @@ index e70289b..d1dff7f 100644
          {
              total += result;
              if (!result || total == length)
-@@ -675,6 +720,7 @@ NTSTATUS WINAPI NtReadFile(HANDLE hFile, HANDLE hEvent,
+@@ -675,6 +721,7 @@ NTSTATUS WINAPI NtReadFile(HANDLE hFile, HANDLE hEvent,
                  }
              }
              else if (type == FD_TYPE_FILE) continue;  /* no async I/O on regular files */
@@ -153,24 +184,16 @@ index e70289b..d1dff7f 100644
          }
          else if (errno != EAGAIN)
          {
-@@ -969,7 +1015,7 @@ NTSTATUS WINAPI NtWriteFile(HANDLE hFile, HANDLE hEvent,
+@@ -969,7 +1016,7 @@ NTSTATUS WINAPI NtWriteFile(HANDLE hFile, HANDLE hEvent,
      unsigned int options;
      struct io_timeouts timeouts;
      NTSTATUS status;
 -    ULONG total = 0;
-+    ULONG total = 0, msgsize;
++    ULONG total = 0, msgsize = (ULONG)-1;
      enum server_fd_type type;
      ULONG_PTR cvalue = apc ? 0 : (ULONG_PTR)apc_user;
      BOOL send_completion = FALSE, async_write, append_write = FALSE, timeout_init_done = FALSE;
-@@ -1064,13 +1110,15 @@ NTSTATUS WINAPI NtWriteFile(HANDLE hFile, HANDLE hEvent,
-         }
-     }
- 
-+    msgsize = (length + 4095) & ~4095;
-+
-     for (;;)
-     {
-         /* zero-length writes on sockets may not work with plain write(2) */
+@@ -1070,7 +1117,7 @@ NTSTATUS WINAPI NtWriteFile(HANDLE hFile, HANDLE hEvent,
          if (!length && (type == FD_TYPE_MAILSLOT || type == FD_TYPE_PIPE || type == FD_TYPE_SOCKET))
              result = send( unix_handle, buffer, 0, 0 );
          else
@@ -179,12 +202,18 @@ index e70289b..d1dff7f 100644
  
          if (result >= 0)
          {
-@@ -1085,6 +1133,12 @@ NTSTATUS WINAPI NtWriteFile(HANDLE hFile, HANDLE hEvent,
+@@ -1085,6 +1132,18 @@ NTSTATUS WINAPI NtWriteFile(HANDLE hFile, HANDLE hEvent,
          else if (errno != EAGAIN)
          {
              if (errno == EINTR) continue;
 +            if (errno == EMSGSIZE && type == FD_TYPE_PIPE && msgsize > 4096)
 +            {
++                if (msgsize == (ULONG)-1)
++                {
++                    FIXME("Message of size %d is too big and will be truncated\n", length);
++                    msgsize = (length + 4095) & ~4095;
++                }
++
 +                /* FIXME: inefficient loop - max named pipe message size should be cached! */
 +                msgsize -= 4096;
 +                continue;
@@ -192,7 +221,7 @@ index e70289b..d1dff7f 100644
              if (!total)
              {
                  if (errno == EFAULT) status = STATUS_INVALID_USER_BUFFER;
-@@ -1517,13 +1571,16 @@ NTSTATUS WINAPI NtFsControlFile(HANDLE handle, HANDLE event, PIO_APC_ROUTINE apc
+@@ -1517,13 +1576,16 @@ NTSTATUS WINAPI NtFsControlFile(HANDLE handle, HANDLE event, PIO_APC_ROUTINE apc
      case FSCTL_PIPE_PEEK:
          {
              FILE_PIPE_PEEK_BUFFER *buffer = out_buffer;
@@ -210,69 +239,50 @@ index e70289b..d1dff7f 100644
  
              if ((status = server_get_unix_fd( handle, FILE_READ_DATA, &fd, &needs_close, NULL, NULL )))
                  break;
-@@ -1554,21 +1611,56 @@ NTSTATUS WINAPI NtFsControlFile(HANDLE handle, HANDLE event, PIO_APC_ROUTINE apc
-                 }
+@@ -1555,18 +1617,36 @@ NTSTATUS WINAPI NtFsControlFile(HANDLE handle, HANDLE event, PIO_APC_ROUTINE apc
              }
              buffer->NamedPipeState    = 0;  /* FIXME */
--            buffer->ReadDataAvailable = avail;
+             buffer->ReadDataAvailable = avail;
 -            buffer->NumberOfMessages  = 0;  /* FIXME */
 -            buffer->MessageLength     = 0;  /* FIXME */
++            buffer->NumberOfMessages  = 0;
++            buffer->MessageLength     = 0;
              io->Information = FIELD_OFFSET( FILE_PIPE_PEEK_BUFFER, Data );
--            status = STATUS_SUCCESS;
+             status = STATUS_SUCCESS;
 -            if (avail)
 +
 +            sock_opt_len = sizeof(sock_type);
 +            if (!getsockopt( fd, SOL_SOCKET, SO_TYPE, &sock_type, &sock_opt_len ) &&
 +                    sock_type == SOCK_SEQPACKET)
-+            {
-+                int peek_offset = 0, msg_length = 0;
-+
-+                if (avail)
-+                {
-+                    sock_opt_len = sizeof(peek_offset);
-+                    if (getsockopt( fd, SOL_SOCKET, SO_PEEK_OFF, &peek_offset, &sock_opt_len ))
-+                    {
-+                        TRACE("getsockopt(SO_PEEK_OFF) failed reason: %s\n", strerror(errno));
-+                        if (needs_close) close( fd );
-+                        status = FILE_GetNtStatus();
-+                        break;
-+                    }
-+
-+                    msg_length = data_size ? recv( fd, buffer->Data, data_size, MSG_PEEK | MSG_TRUNC ) :
-+                                             recv( fd, (char *)&msg_length, sizeof(msg_length), MSG_PEEK | MSG_TRUNC );
-+                    if (msg_length >= 0) io->Information += min(msg_length, data_size);
-+
-+                    if (setsockopt( fd, SOL_SOCKET, SO_PEEK_OFF, &peek_offset, sizeof(peek_offset) ))
-+                    {
-+                        TRACE("setsockopt(SO_PEEK_OFF) failed reason: %s\n", strerror(errno));
-+                        if (needs_close) close( fd );
-+                        status = FILE_GetNtStatus();
-+                        break;
-+                    }
-+                }
-+
-+                buffer->ReadDataAvailable = avail - peek_offset;
-+                buffer->NumberOfMessages  = 0;  /* FIXME */
-+                buffer->MessageLength     = msg_length;
-+            }
-+            else
              {
 -                ULONG data_size = out_size - FIELD_OFFSET( FILE_PIPE_PEEK_BUFFER, Data );
-                 if (data_size)
+-                if (data_size)
++                int peek_offset = 0, msg_length = 0;
++                if (avail)
                  {
-                     int res = recv( fd, buffer->Data, data_size, MSG_PEEK );
-                     if (res >= 0) io->Information += res;
+-                    int res = recv( fd, buffer->Data, data_size, MSG_PEEK );
+-                    if (res >= 0) io->Information += res;
++                    sock_opt_len = sizeof(peek_offset);
++                    if (!getsockopt( fd, SOL_SOCKET, SO_PEEK_OFF, &peek_offset, &sock_opt_len ) && peek_offset < avail)
++                    {
++                        msg_length = data_size ? recv( fd, buffer->Data, data_size, MSG_PEEK | MSG_TRUNC | MSG_DONTWAIT ) :
++                                                 recv( fd, (char *)&msg_length, sizeof(msg_length), MSG_PEEK | MSG_TRUNC | MSG_DONTWAIT );
++                        if (msg_length >= 0) io->Information += min(msg_length, data_size);
++                        if (setsockopt( fd, SOL_SOCKET, SO_PEEK_OFF, &peek_offset, sizeof(peek_offset) ))
++                            ERR("setsockopt(SO_PEEK_OFF) failed reason: %s\n", strerror(errno));
++                    }
                  }
-+
-+                buffer->ReadDataAvailable = avail;
-+                buffer->NumberOfMessages  = 0;
-+                buffer->MessageLength     = 0;
++                buffer->ReadDataAvailable = avail - peek_offset;
++                buffer->NumberOfMessages  = (peek_offset < avail); /* FIXME */
++                buffer->MessageLength     = max(0, msg_length);
++            }
++            else if (data_size)
++            {
++                int res = recv( fd, buffer->Data, data_size, MSG_PEEK );
++                if (res >= 0) io->Information += res;
              }
              if (needs_close) close( fd );
-+            status = STATUS_SUCCESS;
          }
-         break;
- 
 diff --git a/server/named_pipe.c b/server/named_pipe.c
 index fa8735e..9fb79d5 100644
 --- a/server/named_pipe.c
