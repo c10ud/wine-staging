@@ -1,4 +1,4 @@
-From 02f8d619b3341fa353727277ba7fb8f469a97a7a Mon Sep 17 00:00:00 2001
+From b54a6e48cdd49cda30857f0de0b1421cb47de457 Mon Sep 17 00:00:00 2001
 From: Adam Martinson <adam.r.martinson@gmail.com>
 Date: Tue, 18 Dec 2012 15:52:57 -0600
 Subject: kernel32/tests: Add tests for closing named pipes.
@@ -8,10 +8,10 @@ Subject: kernel32/tests: Add tests for closing named pipes.
  1 file changed, 93 insertions(+)
 
 diff --git a/dlls/kernel32/tests/pipe.c b/dlls/kernel32/tests/pipe.c
-index 50ff9a2..8e94a07 100644
+index 3f0420d..69c1586 100644
 --- a/dlls/kernel32/tests/pipe.c
 +++ b/dlls/kernel32/tests/pipe.c
-@@ -925,6 +925,98 @@ static void test_CreateNamedPipe_instances_must_match(void)
+@@ -923,6 +923,98 @@ static void test_CreateNamedPipe_instances_must_match(void)
      ok(CloseHandle(hnp2), "CloseHandle\n");
  }
  
@@ -110,7 +110,7 @@ index 50ff9a2..8e94a07 100644
  /** implementation of alarm() */
  static DWORD CALLBACK alarmThreadMain(LPVOID arg)
  {
-@@ -2431,6 +2523,7 @@ START_TEST(pipe)
+@@ -2419,6 +2511,7 @@ START_TEST(pipe)
      test_NamedPipe_2();
      test_CreateNamedPipe(PIPE_TYPE_BYTE);
      test_CreateNamedPipe(PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE);

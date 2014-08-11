@@ -271,7 +271,7 @@ kernel32-GetVolumePathName.ok:
 # |
 # | Included patches:
 # |   *	Fix for ConnectNamedPort return value in overlapped mode. [by Dan Kegel]
-# |   *	Support for NamedPipe operations via SOCK_SEQPACKET sockets. [rev 4, by Sebastian Lackner / Erich E. Hoover / Adam
+# |   *	Support for NamedPipe operations via SOCK_SEQPACKET sockets. [rev 5, by Sebastian Lackner / Erich E. Hoover / Adam
 # | 	Martinson]
 # |
 # | This patchset fixes the following Wine bugs:
@@ -281,31 +281,34 @@ kernel32-GetVolumePathName.ok:
 # |   *	[#17195] NamedPipe datagrams need to be _really_ datagrams
 # |
 # | Modified files: 
-# |   *	dlls/kernel32/sync.c, dlls/kernel32/tests/pipe.c, dlls/ntdll/file.c, include/winternl.h, server/named_pipe.c,
-# | 	server/protocol.def, server/sock.c, server/sock.h
+# |   *	dlls/kernel32/sync.c, dlls/kernel32/tests/pipe.c, dlls/ntdll/file.c, dlls/ntdll/tests/pipe.c, include/winternl.h,
+# | 	server/named_pipe.c, server/protocol.def, server/sock.c, server/sock.h
 # |
 .INTERMEDIATE: kernel32-Named_Pipe.ok
 kernel32-Named_Pipe.ok: ws2_32-Connect_Time.ok ws2_32-TransmitFile.ok server-Address_Change_Notification.ok
 	$(call APPLY_FILE,kernel32-Named_Pipe/0001-kernel32-ConnectNamedPort-should-return-FALSE-and-se.patch)
 	$(call APPLY_FILE,kernel32-Named_Pipe/0002-kernel32-tests-Always-allow-only-one-specific-test-r.patch)
-	$(call APPLY_FILE,kernel32-Named_Pipe/0003-kernel32-tests-Add-tests-for-partially-received-pipe.patch)
-	$(call APPLY_FILE,kernel32-Named_Pipe/0004-kernel32-tests-Add-additional-tests-for-multithreade.patch)
-	$(call APPLY_FILE,kernel32-Named_Pipe/0005-kernel32-tests-Add-tests-for-PeekNamedPipe-with-part.patch)
-	$(call APPLY_FILE,kernel32-Named_Pipe/0006-kernel32-tests-Add-tests-for-sending-and-receiving-l.patch)
-	$(call APPLY_FILE,kernel32-Named_Pipe/0007-kernel32-tests-Add-tests-for-closing-named-pipes.patch)
-	$(call APPLY_FILE,kernel32-Named_Pipe/0008-server-Show-warning-if-message-mode-is-not-supported.patch)
-	$(call APPLY_FILE,kernel32-Named_Pipe/0009-server-Use-SOCK_SEQPACKET-socket-in-combination-with.patch)
-	$(call APPLY_FILE,kernel32-Named_Pipe/0010-server-Don-t-use-application-buffer-size-for-message.patch)
-	$(call APPLY_FILE,kernel32-Named_Pipe/0011-server-Store-the-message-read-mode-for-a-pipe-in-the.patch)
-	$(call APPLY_FILE,kernel32-Named_Pipe/0012-kernel32-tests-Test-sending-peeking-and-receiving-an.patch)
-	$(call APPLY_FILE,kernel32-Named_Pipe/0013-kernel32-Add-implementation-of-SetNamedPipeHandleSta.patch)
-	$(call APPLY_FILE,kernel32-Named_Pipe/0014-server-Add-support-for-PIPE_NOWAIT-on-message-mode-p.patch)
-	$(call APPLY_FILE,kernel32-Named_Pipe/0015-kernel32-tests-Add-tests-for-PIPE_NOWAIT-in-message-.patch)
-	$(call APPLY_FILE,kernel32-Named_Pipe/0016-kernel32-Allow-to-set-PIPE_NOWAIT-on-byte-mode-pipes.patch)
-	$(call APPLY_FILE,kernel32-Named_Pipe/0017-server-Add-a-new-wineserver-call-set_named_pipe_info.patch)
+	$(call APPLY_FILE,kernel32-Named_Pipe/0003-server-Store-pipe_flags-in-a-separate-variable-for-b.patch)
+	$(call APPLY_FILE,kernel32-Named_Pipe/0004-ntdll-Implement-FILE_PIPE_INFORMATION-for-NtQueryInf.patch)
+	$(call APPLY_FILE,kernel32-Named_Pipe/0005-server-Implement-set_named_pipe_info-wineserver-call.patch)
+	$(call APPLY_FILE,kernel32-Named_Pipe/0006-ntdll-tests-Add-tests-for-FILE_PIPE_INFORMATION.patch)
+	$(call APPLY_FILE,kernel32-Named_Pipe/0007-kernel32-Implement-Get-Set-NamedPipeHandleState.patch)
+	$(call APPLY_FILE,kernel32-Named_Pipe/0008-kernel32-tests-Add-tests-for-partially-received-pipe.patch)
+	$(call APPLY_FILE,kernel32-Named_Pipe/0009-kernel32-tests-Add-additional-tests-for-multithreade.patch)
+	$(call APPLY_FILE,kernel32-Named_Pipe/0010-kernel32-tests-Add-tests-for-PeekNamedPipe-with-part.patch)
+	$(call APPLY_FILE,kernel32-Named_Pipe/0011-kernel32-tests-Add-tests-for-sending-and-receiving-l.patch)
+	$(call APPLY_FILE,kernel32-Named_Pipe/0012-kernel32-tests-Add-tests-for-closing-named-pipes.patch)
+	$(call APPLY_FILE,kernel32-Named_Pipe/0013-server-Show-warning-if-message-mode-is-not-supported.patch)
+	$(call APPLY_FILE,kernel32-Named_Pipe/0014-server-Use-SOCK_SEQPACKET-socket-in-combination-with.patch)
+	$(call APPLY_FILE,kernel32-Named_Pipe/0015-server-Don-t-use-application-buffer-size-for-message.patch)
+	$(call APPLY_FILE,kernel32-Named_Pipe/0016-ntdll-Add-handling-for-partially-received-messages-i.patch)
+	$(call APPLY_FILE,kernel32-Named_Pipe/0017-kernel32-tests-Test-sending-peeking-and-receiving-an.patch)
+	$(call APPLY_FILE,kernel32-Named_Pipe/0018-ntdll-Add-support-for-nonblocking-pipes.patch)
+	$(call APPLY_FILE,kernel32-Named_Pipe/0019-kernel32-tests-Add-tests-for-PIPE_NOWAIT-in-message-.patch)
+	$(call APPLY_FILE,kernel32-Named_Pipe/0020-kernel32-Allow-to-set-PIPE_NOWAIT-on-byte-mode-pipes.patch)
 	@( \
 		echo '+    { "kernel32-Named_Pipe", "Dan Kegel", "Fix for ConnectNamedPort return value in overlapped mode." },'; \
-		echo '+    { "kernel32-Named_Pipe", "Sebastian Lackner / Erich E. Hoover / Adam Martinson", "Support for NamedPipe operations via SOCK_SEQPACKET sockets. [rev 4]" },'; \
+		echo '+    { "kernel32-Named_Pipe", "Sebastian Lackner / Erich E. Hoover / Adam Martinson", "Support for NamedPipe operations via SOCK_SEQPACKET sockets. [rev 5]" },'; \
 	) > kernel32-Named_Pipe.ok
 
 # Patchset kernel32-SystemFileCacheSize

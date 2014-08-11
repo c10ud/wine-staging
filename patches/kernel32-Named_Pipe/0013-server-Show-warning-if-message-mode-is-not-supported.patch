@@ -1,4 +1,4 @@
-From 3ed4f942b9a9d5fd4318bbaff7241429772c7fae Mon Sep 17 00:00:00 2001
+From 344235041d7624a7f051a153e7e38bfe81fb61ff Mon Sep 17 00:00:00 2001
 From: Sebastian Lackner <sebastian@fds-team.de>
 Date: Mon, 4 Aug 2014 00:29:26 +0200
 Subject: server: Show warning if message mode is not supported.
@@ -13,10 +13,10 @@ missing message mode support.
  3 files changed, 13 insertions(+), 4 deletions(-)
 
 diff --git a/dlls/ntdll/file.c b/dlls/ntdll/file.c
-index d2efcc1..46b3937 100644
+index 92d9829..6774a5bc 100644
 --- a/dlls/ntdll/file.c
 +++ b/dlls/ntdll/file.c
-@@ -3003,6 +3003,7 @@ NTSTATUS WINAPI NtCreateNamedPipeFile( PHANDLE handle, ULONG access,
+@@ -3044,6 +3044,7 @@ NTSTATUS WINAPI NtCreateNamedPipeFile( PHANDLE handle, ULONG access,
                                         PLARGE_INTEGER timeout)
  {
      NTSTATUS    status;
@@ -24,7 +24,7 @@ index d2efcc1..46b3937 100644
  
      TRACE("(%p %x %s %p %x %d %x %d %d %d %d %d %d %p)\n",
            handle, access, debugstr_w(attr->ObjectName->Buffer), iosb, sharing, dispo,
-@@ -3013,6 +3014,10 @@ NTSTATUS WINAPI NtCreateNamedPipeFile( PHANDLE handle, ULONG access,
+@@ -3054,6 +3055,10 @@ NTSTATUS WINAPI NtCreateNamedPipeFile( PHANDLE handle, ULONG access,
      if (timeout->QuadPart > 0)
          FIXME("Wrong time %s\n", wine_dbgstr_longlong(timeout->QuadPart));
  
@@ -35,7 +35,7 @@ index d2efcc1..46b3937 100644
      SERVER_START_REQ( create_named_pipe )
      {
          req->access  = access;
-@@ -3020,10 +3025,7 @@ NTSTATUS WINAPI NtCreateNamedPipeFile( PHANDLE handle, ULONG access,
+@@ -3061,10 +3066,7 @@ NTSTATUS WINAPI NtCreateNamedPipeFile( PHANDLE handle, ULONG access,
          req->rootdir = wine_server_obj_handle( attr->RootDirectory );
          req->options = options;
          req->sharing = sharing;
@@ -47,7 +47,7 @@ index d2efcc1..46b3937 100644
          req->maxinstances = max_inst;
          req->outsize = outbound_quota;
          req->insize  = inbound_quota;
-@@ -3032,8 +3034,13 @@ NTSTATUS WINAPI NtCreateNamedPipeFile( PHANDLE handle, ULONG access,
+@@ -3073,8 +3075,13 @@ NTSTATUS WINAPI NtCreateNamedPipeFile( PHANDLE handle, ULONG access,
                                attr->ObjectName->Length );
          status = wine_server_call( req );
          if (!status) *handle = wine_server_ptr_handle( reply->handle );
@@ -62,10 +62,10 @@ index d2efcc1..46b3937 100644
  }
  
 diff --git a/server/named_pipe.c b/server/named_pipe.c
-index 4b23ba2..fa8735e 100644
+index 0ec069d..70c028c 100644
 --- a/server/named_pipe.c
 +++ b/server/named_pipe.c
-@@ -957,6 +957,7 @@ DECL_HANDLER(create_named_pipe)
+@@ -961,6 +961,7 @@ DECL_HANDLER(create_named_pipe)
          return;
      }
  
@@ -74,7 +74,7 @@ index 4b23ba2..fa8735e 100644
      get_req_unicode_str( &name );
      if (req->rootdir && !(root = get_directory_obj( current->process, req->rootdir, 0 )))
 diff --git a/server/protocol.def b/server/protocol.def
-index a8c1fb9..2acd622 100644
+index c9270ea..f0d7287 100644
 --- a/server/protocol.def
 +++ b/server/protocol.def
 @@ -2285,6 +2285,7 @@ enum message_type

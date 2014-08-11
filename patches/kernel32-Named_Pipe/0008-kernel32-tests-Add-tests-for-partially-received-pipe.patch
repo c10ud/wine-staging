@@ -1,4 +1,4 @@
-From 1599e26ea6aa5bf535b445fe3699d14ba6f9cec7 Mon Sep 17 00:00:00 2001
+From 98d4321bea13eb2d43b3effc418068434b19eba2 Mon Sep 17 00:00:00 2001
 From: Sebastian Lackner <sebastian@fds-team.de>
 Date: Wed, 30 Jul 2014 21:52:38 +0200
 Subject: kernel32/tests: Add tests for partially received pipe messages
@@ -12,7 +12,7 @@ Changes in v2:
  1 file changed, 107 insertions(+), 1 deletion(-)
 
 diff --git a/dlls/kernel32/tests/pipe.c b/dlls/kernel32/tests/pipe.c
-index c19456e..65a4ec4 100644
+index e6362c6..2b47eda 100644
 --- a/dlls/kernel32/tests/pipe.c
 +++ b/dlls/kernel32/tests/pipe.c
 @@ -127,6 +127,21 @@ static void test_CreateNamedPipe(int pipemode)
@@ -103,7 +103,7 @@ index c19456e..65a4ec4 100644
          /* Test reading of multiple writes */
          memset(ibuf, 0, sizeof(ibuf));
          ok(WriteFile(hnp, obuf, sizeof(obuf), &written, NULL), "WriteFile3a\n");
-@@ -238,7 +312,9 @@ static void test_CreateNamedPipe(int pipemode)
+@@ -236,7 +310,9 @@ static void test_CreateNamedPipe(int pipemode)
              }
              pbuf = ibuf;
              ok(memcmp(obuf, pbuf, sizeof(obuf)) == 0, "content 5a check\n");
@@ -114,7 +114,7 @@ index c19456e..65a4ec4 100644
              /* Multiple writes in the reverse direction */
              /* the write of obuf2 from write4 should still be in the buffer */
              ok(PeekNamedPipe(hnp, ibuf, sizeof(ibuf), &readden, &avail, NULL), "Peek6a\n");
-@@ -268,6 +344,36 @@ static void test_CreateNamedPipe(int pipemode)
+@@ -266,6 +342,36 @@ static void test_CreateNamedPipe(int pipemode)
              }
              pbuf = ibuf;
              ok(memcmp(obuf, pbuf, sizeof(obuf)) == 0, "content 6a check\n");

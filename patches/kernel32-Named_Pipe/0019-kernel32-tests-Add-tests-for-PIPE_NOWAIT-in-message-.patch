@@ -1,4 +1,4 @@
-From 4b018ff3345cd454e3eb89f108df06893c39eaf6 Mon Sep 17 00:00:00 2001
+From 0218d173d333114bf91ea1492423d8091ea438c2 Mon Sep 17 00:00:00 2001
 From: Sebastian Lackner <sebastian@fds-team.de>
 Date: Mon, 11 Aug 2014 04:19:49 +0200
 Subject: kernel32/tests: Add tests for PIPE_NOWAIT in message mode.
@@ -8,7 +8,7 @@ Subject: kernel32/tests: Add tests for PIPE_NOWAIT in message mode.
  1 file changed, 100 insertions(+)
 
 diff --git a/dlls/kernel32/tests/pipe.c b/dlls/kernel32/tests/pipe.c
-index 3af63b0..4af6bb9 100644
+index c80d2af..29430a0 100644
 --- a/dlls/kernel32/tests/pipe.c
 +++ b/dlls/kernel32/tests/pipe.c
 @@ -1077,6 +1077,7 @@ static void test_CloseNamedPipe(void)
@@ -145,7 +145,7 @@ index 3af63b0..4af6bb9 100644
  static void test_NamedPipeHandleState(void)
  {
      HANDLE server, client;
-@@ -2698,6 +2797,7 @@ START_TEST(pipe)
+@@ -2692,6 +2791,7 @@ START_TEST(pipe)
      test_CreatePipe();
      test_impersonation();
      test_overlapped();

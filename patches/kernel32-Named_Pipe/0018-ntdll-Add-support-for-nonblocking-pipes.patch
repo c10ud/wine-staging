@@ -1,0 +1,48 @@
+From 19191167f0859a81760e6fd28706b73b683468ec Mon Sep 17 00:00:00 2001
+From: Sebastian Lackner <sebastian@fds-team.de>
+Date: Mon, 11 Aug 2014 18:29:36 +0200
+Subject: ntdll: Add support for nonblocking pipes.
+
+---
+ dlls/ntdll/file.c |   13 ++++++++++++-
+ 1 file changed, 12 insertions(+), 1 deletion(-)
+
+diff --git a/dlls/ntdll/file.c b/dlls/ntdll/file.c
+index 2bb960a..7c0a2ee 100644
+--- a/dlls/ntdll/file.c
++++ b/dlls/ntdll/file.c
+@@ -679,12 +679,16 @@ NTSTATUS WINAPI NtReadFile(HANDLE hFile, HANDLE hEvent,
+     {
+         if (message_mode_flags & NAMED_PIPE_MESSAGE_STREAM_WRITE)
+         {
++            int recvmsg_flags = MSG_PEEK;
++            if (total || (message_mode_flags & NAMED_PIPE_NONBLOCKING_MODE))
++                recvmsg_flags |= MSG_DONTWAIT;
++
+             /* for message mode pipes we can't use the regular read command, as this would discard
+              * the rest of the message, which doesn't fit into the buffer. To avoid that use recvmsg()
+              * with MSG_PEEK. */
+             iov.iov_base = (char *)buffer + total;
+             iov.iov_len  = length - total;
+-            result = recvmsg( unix_handle, &msg, MSG_PEEK | (total ? MSG_DONTWAIT : 0) );
++            result = recvmsg( unix_handle, &msg, recvmsg_flags );
+ 
+             /* dequeue one message */
+             if (result >= 0 && !(msg.msg_flags & MSG_TRUNC))
+@@ -778,6 +782,13 @@ NTSTATUS WINAPI NtReadFile(HANDLE hFile, HANDLE hEvent,
+             goto done;
+         }
+ 
++        /* don't wait in nowait mode */
++        if (message_mode_flags & NAMED_PIPE_NONBLOCKING_MODE)
++        {
++            status = total ? STATUS_SUCCESS : STATUS_PIPE_EMPTY;
++            goto done;
++        }
++
+         if (async_read)
+         {
+             async_fileio_read *fileio;
+-- 
+1.7.9.5
+

@@ -1,4 +1,4 @@
-From a009496ee6e42daebb808d577e24faa3429407ce Mon Sep 17 00:00:00 2001
+From 7a4aee604842277183d7bc3c1ba84c494a5debcc Mon Sep 17 00:00:00 2001
 From: Sebastian Lackner <sebastian@fds-team.de>
 Date: Thu, 31 Jul 2014 00:28:59 +0200
 Subject: kernel32/tests: Add tests for PeekNamedPipe with partial received
@@ -16,7 +16,7 @@ Changes in v2:
  1 file changed, 140 insertions(+), 2 deletions(-)
 
 diff --git a/dlls/kernel32/tests/pipe.c b/dlls/kernel32/tests/pipe.c
-index f1fbac7..f483eef 100644
+index 95979c1..501ca89 100644
 --- a/dlls/kernel32/tests/pipe.c
 +++ b/dlls/kernel32/tests/pipe.c
 @@ -46,7 +46,8 @@ static void CALLBACK user_apc(ULONG_PTR param)
@@ -118,7 +118,7 @@ index f1fbac7..f483eef 100644
  
          memset(ibuf, 0, sizeof(ibuf));
          ok(WriteFile(hFile, obuf, sizeof(obuf), &written, NULL), "WriteFile\n");
-@@ -449,6 +499,16 @@ static void test_CreateNamedPipe(int pipemode)
+@@ -447,6 +497,16 @@ static void test_CreateNamedPipe(int pipemode)
              ok(written == sizeof(obuf), "write file len 9\n");
              ok(WriteFile(hnp, obuf2, sizeof(obuf2), &written, NULL), "WriteFile 9\n");
              ok(written == sizeof(obuf2), "write file len 9\n");
@@ -135,7 +135,7 @@ index f1fbac7..f483eef 100644
              SetLastError(0xdeadbeef);
              todo_wine
              ok(!ReadFile(hFile, ibuf, 4, &readden, NULL), "ReadFile 9\n");
-@@ -462,6 +522,16 @@ static void test_CreateNamedPipe(int pipemode)
+@@ -460,6 +520,16 @@ static void test_CreateNamedPipe(int pipemode)
              todo_wine
              ok(GetLastError() == ERROR_MORE_DATA, "wrong error 9\n");
              ok(readden == 4, "read got %d bytes 9\n", readden);
@@ -152,7 +152,7 @@ index f1fbac7..f483eef 100644
              ret = RpcReadFile(hFile, ibuf + 8, sizeof(ibuf), &readden, NULL);
              ok(ret, "RpcReadFile 9\n");
              todo_wine
-@@ -470,6 +540,14 @@ static void test_CreateNamedPipe(int pipemode)
+@@ -468,6 +538,14 @@ static void test_CreateNamedPipe(int pipemode)
              if (readden <= sizeof(obuf)-8) /* blocks forever if second part was already received */
              {
                  memset(ibuf, 0, sizeof(ibuf));
@@ -167,7 +167,7 @@ index f1fbac7..f483eef 100644
                  SetLastError(0xdeadbeef);
                  ret = RpcReadFile(hFile, ibuf, 4, &readden, NULL);
                  ok(!ret, "RpcReadFile 9\n");
-@@ -482,11 +560,27 @@ static void test_CreateNamedPipe(int pipemode)
+@@ -480,11 +558,27 @@ static void test_CreateNamedPipe(int pipemode)
                  todo_wine
                  ok(GetLastError() == ERROR_MORE_DATA, "wrong error 9\n");
                  ok(readden == 4, "read got %d bytes 9\n", readden);
@@ -195,7 +195,7 @@ index f1fbac7..f483eef 100644
  
              /* Now the reverse direction */
              memset(ibuf, 0, sizeof(ibuf));
-@@ -494,6 +588,16 @@ static void test_CreateNamedPipe(int pipemode)
+@@ -492,6 +586,16 @@ static void test_CreateNamedPipe(int pipemode)
              ok(written == sizeof(obuf2), "write file len 10\n");
              ok(WriteFile(hFile, obuf, sizeof(obuf), &written, NULL), "WriteFile 10\n");
              ok(written == sizeof(obuf), "write file len 10\n");
@@ -212,7 +212,7 @@ index f1fbac7..f483eef 100644
              SetLastError(0xdeadbeef);
              todo_wine
              ok(!ReadFile(hnp, ibuf, 4, &readden, NULL), "ReadFile 10\n");
-@@ -507,6 +611,16 @@ static void test_CreateNamedPipe(int pipemode)
+@@ -505,6 +609,16 @@ static void test_CreateNamedPipe(int pipemode)
              todo_wine
              ok(GetLastError() == ERROR_MORE_DATA, "wrong error 10\n");
              ok(readden == 4, "read got %d bytes 10\n", readden);
@@ -229,7 +229,7 @@ index f1fbac7..f483eef 100644
              ret = RpcReadFile(hnp, ibuf + 8, sizeof(ibuf), &readden, NULL);
              ok(ret, "RpcReadFile 10\n");
              todo_wine
-@@ -515,6 +629,14 @@ static void test_CreateNamedPipe(int pipemode)
+@@ -513,6 +627,14 @@ static void test_CreateNamedPipe(int pipemode)
              if (readden <= sizeof(obuf2)-8) /* blocks forever if second part was already received */
              {
                  memset(ibuf, 0, sizeof(ibuf));
@@ -244,7 +244,7 @@ index f1fbac7..f483eef 100644
                  SetLastError(0xdeadbeef);
                  ret = RpcReadFile(hnp, ibuf, 4, &readden, NULL);
                  ok(!ret, "RpcReadFile 10\n");
-@@ -527,11 +649,27 @@ static void test_CreateNamedPipe(int pipemode)
+@@ -525,11 +647,27 @@ static void test_CreateNamedPipe(int pipemode)
                  todo_wine
                  ok(GetLastError() == ERROR_MORE_DATA, "wrong error 10\n");
                  ok(readden == 4, "read got %d bytes 10\n", readden);

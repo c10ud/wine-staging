@@ -1,4 +1,4 @@
-From 7641752462480e996379698558944f6373f86bbe Mon Sep 17 00:00:00 2001
+From a02d97015109e06fee7ae7fdd02a5b2b36ad53bc Mon Sep 17 00:00:00 2001
 From: Sebastian Lackner <sebastian@fds-team.de>
 Date: Sun, 3 Aug 2014 23:14:35 +0200
 Subject: kernel32/tests: Add tests for sending and receiving large messages.
@@ -12,7 +12,7 @@ can never fail because of size limitations.
  1 file changed, 124 insertions(+)
 
 diff --git a/dlls/kernel32/tests/pipe.c b/dlls/kernel32/tests/pipe.c
-index f483eef..50ff9a2 100644
+index 501ca89..3f0420d 100644
 --- a/dlls/kernel32/tests/pipe.c
 +++ b/dlls/kernel32/tests/pipe.c
 @@ -47,6 +47,7 @@ static void CALLBACK user_apc(ULONG_PTR param)
@@ -38,7 +38,7 @@ index f483eef..50ff9a2 100644
          case RPC_PEEKNAMEDPIPE:
              rpcargs->returnValue = (PVOID)PeekNamedPipe( (HANDLE)rpcargs->args[0],    /* hPipe */
                                                           (LPVOID)rpcargs->args[1],    /* lpvBuffer */
-@@ -673,6 +682,121 @@ static void test_CreateNamedPipe(int pipemode)
+@@ -671,6 +680,121 @@ static void test_CreateNamedPipe(int pipemode)
  
          }
  

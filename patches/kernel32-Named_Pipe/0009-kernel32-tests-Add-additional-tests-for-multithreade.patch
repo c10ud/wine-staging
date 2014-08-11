@@ -1,4 +1,4 @@
-From 0f2194bfa10c52f725707cb83092cba33900d75e Mon Sep 17 00:00:00 2001
+From 2769c5ae30d876391faeff30d5f6c0c80f274ebd Mon Sep 17 00:00:00 2001
 From: Sebastian Lackner <sebastian@fds-team.de>
 Date: Sun, 10 Aug 2014 00:02:16 +0200
 Subject: kernel32/tests: Add additional tests for multithreaded partial reads
@@ -18,7 +18,7 @@ Changes in v2:
  1 file changed, 159 insertions(+)
 
 diff --git a/dlls/kernel32/tests/pipe.c b/dlls/kernel32/tests/pipe.c
-index 65a4ec4..f1fbac7 100644
+index 2b47eda..95979c1 100644
 --- a/dlls/kernel32/tests/pipe.c
 +++ b/dlls/kernel32/tests/pipe.c
 @@ -43,6 +43,72 @@ static void CALLBACK user_apc(ULONG_PTR param)
@@ -94,7 +94,7 @@ index 65a4ec4..f1fbac7 100644
  static void test_CreateNamedPipe(int pipemode)
  {
      HANDLE hnp;
-@@ -374,6 +440,99 @@ static void test_CreateNamedPipe(int pipemode)
+@@ -372,6 +438,99 @@ static void test_CreateNamedPipe(int pipemode)
              ok(readden == sizeof(obuf)-4, "read got %d bytes 8\n", readden);
              ok(memcmp(obuf, ibuf, written) == 0, "content check 8\n");
  
