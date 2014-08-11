@@ -1,4 +1,4 @@
-From 8279961a4585a84e396fbef4ca6aee31b7bb7539 Mon Sep 17 00:00:00 2001
+From 02f8d619b3341fa353727277ba7fb8f469a97a7a Mon Sep 17 00:00:00 2001
 From: Adam Martinson <adam.r.martinson@gmail.com>
 Date: Tue, 18 Dec 2012 15:52:57 -0600
 Subject: kernel32/tests: Add tests for closing named pipes.

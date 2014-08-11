@@ -1,4 +1,4 @@
-From 175ab888d2a5128c1ee721ef2b97a11fc9b43fef Mon Sep 17 00:00:00 2001
+From ccc94f52478353b07619021fb416de6b3a2f926b Mon Sep 17 00:00:00 2001
 From: Sebastian Lackner <sebastian@fds-team.de>
 Date: Sun, 10 Aug 2014 03:44:34 +0200
 Subject: server: Don't use application buffer size for message mode buffers.

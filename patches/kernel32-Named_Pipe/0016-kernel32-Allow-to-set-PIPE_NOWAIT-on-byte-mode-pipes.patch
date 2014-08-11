@@ -1,0 +1,213 @@
+From 2c6d91fe1a094ccc0afa26a9e55cb4c62bc44232 Mon Sep 17 00:00:00 2001
+From: Sebastian Lackner <sebastian@fds-team.de>
+Date: Mon, 11 Aug 2014 05:34:19 +0200
+Subject: kernel32: Allow to set PIPE_NOWAIT on byte-mode pipes.
+
+This patch implements the functionality to set PIPE_NOWAIT on regular bytemode
+pipes. This patch also extends the test to show that the implemented behaviour
+matches the native implementation.
+---
+ dlls/kernel32/sync.c       |   17 ++++++++---------
+ dlls/kernel32/tests/pipe.c |   37 +++++++++++++++++++++++++++++--------
+ dlls/ntdll/file.c          |    9 ++++++---
+ server/named_pipe.c        |   18 +++++++-----------
+ 4 files changed, 50 insertions(+), 31 deletions(-)
+
+diff --git a/dlls/kernel32/sync.c b/dlls/kernel32/sync.c
+index a12f233..d849807 100644
+--- a/dlls/kernel32/sync.c
++++ b/dlls/kernel32/sync.c
+@@ -1761,8 +1761,14 @@ BOOL WINAPI SetNamedPipeHandleState(
+         {
+             int sock_type = 0;
+             socklen_t sock_opt_len = sizeof(sock_type);
+-            if (!getsockopt( fd, SOL_SOCKET, SO_TYPE, &sock_type, &sock_opt_len ) &&
+-                    sock_type == SOCK_SEQPACKET)
++            if (getsockopt( fd, SOL_SOCKET, SO_TYPE, &sock_type, &sock_opt_len ) ||
++                    sock_type != SOCK_SEQPACKET)
++            {
++                if (*lpMode & PIPE_READMODE_MESSAGE)
++                    status = STATUS_INVALID_PARAMETER;
++            }
++
++            if (status == STATUS_SUCCESS)
+             {
+                 int message_mode_flags = 0;
+                 if (*lpMode & PIPE_READMODE_MESSAGE)
+@@ -1772,13 +1778,6 @@ BOOL WINAPI SetNamedPipeHandleState(
+                 if (fcntl( fd, F_SETSIG, message_mode_flags ) == -1)
+                     status = STATUS_ACCESS_VIOLATION;
+             }
+-            else
+-            {
+-                if (*lpMode & PIPE_READMODE_MESSAGE)
+-                    status = STATUS_INVALID_PARAMETER;
+-                if (*lpMode & PIPE_NOWAIT)
+-                    FIXME("PIPE_NOWAIT is not currently supported.\n");
+-            }
+         }
+ 
+         wine_server_release_fd( hNamedPipe, fd );
+diff --git a/dlls/kernel32/tests/pipe.c b/dlls/kernel32/tests/pipe.c
+index 4af6bb9..22b1311 100644
+--- a/dlls/kernel32/tests/pipe.c
++++ b/dlls/kernel32/tests/pipe.c
+@@ -2419,7 +2419,7 @@ static void test_overlapped(void)
+     CloseHandle(thread);
+ }
+ 
+-static void test_nowait(void)
++static void test_nowait(int pipemode)
+ {
+     HANDLE hnp;
+     HANDLE hFile;
+@@ -2430,7 +2430,7 @@ static void test_nowait(void)
+     DWORD lpmode;
+ 
+     hnp = CreateNamedPipeA(PIPENAME, PIPE_ACCESS_DUPLEX,
+-                           PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_NOWAIT,
++                           pipemode | PIPE_NOWAIT,
+                            /* nMaxInstances */ 1,
+                            /* nOutBufSize */ 1024,
+                            /* nInBufSize */ 1024,
+@@ -2461,7 +2461,7 @@ static void test_nowait(void)
+         ok(readden == 0, "got %d bytes\n", readden);
+         ok(GetLastError() == ERROR_NO_DATA, "GetLastError() returned %08x, expected ERROR_NO_DATA\n", GetLastError());
+ 
+-        lpmode = PIPE_READMODE_MESSAGE | PIPE_NOWAIT;
++        lpmode = (pipemode & PIPE_READMODE_MESSAGE) | PIPE_NOWAIT;
+         ok(SetNamedPipeHandleState(hFile, &lpmode, NULL, NULL), "Change mode\n");
+ 
+         /* send message from server to client */
+@@ -2485,8 +2485,18 @@ static void test_nowait(void)
+         ok(WriteFile(hFile, obuf, 0, &written, NULL), "WriteFile\n");
+         ok(written == 0, "write file len\n");
+ 
+-        ok(ReadFile(hnp, ibuf, sizeof(ibuf), &readden, NULL), "ReadFile() failed: %08x\n", GetLastError());
+-        ok(readden == 0, "got %d bytes\n", readden);
++        if (pipemode != PIPE_TYPE_BYTE)
++        {
++            ok(ReadFile(hnp, ibuf, sizeof(ibuf), &readden, NULL), "ReadFile() failed: %08x\n", GetLastError());
++            ok(readden == 0, "got %d bytes\n", readden);
++        }
++        else
++        {
++            SetLastError(0xdeadbeef);
++            ok(!ReadFile(hnp, ibuf, sizeof(ibuf), &readden, NULL), "ReadFile() succeeded\n");
++            ok(readden == 0, "got %d bytes\n", readden);
++            ok(GetLastError() == ERROR_NO_DATA, "GetLastError() returned %08x, expected ERROR_NO_DATA\n", GetLastError());
++        }
+ 
+         readden = 0xdeadbeef;
+         SetLastError(0xdeadbeef);
+@@ -2498,8 +2508,18 @@ static void test_nowait(void)
+         ok(WriteFile(hnp, obuf, 0, &written, NULL), "WriteFile\n");
+         ok(written == 0, "write file len\n");
+ 
+-        ok(ReadFile(hFile, ibuf, sizeof(ibuf), &readden, NULL), "ReadFile() failed: %08x\n", GetLastError());
+-        ok(readden == 0, "got %d bytes\n", readden);
++        if (pipemode != PIPE_TYPE_BYTE)
++        {
++            ok(ReadFile(hFile, ibuf, sizeof(ibuf), &readden, NULL), "ReadFile() failed: %08x\n", GetLastError());
++            ok(readden == 0, "got %d bytes\n", readden);
++        }
++        else
++        {
++            SetLastError(0xdeadbeef);
++            ok(!ReadFile(hFile, ibuf, sizeof(ibuf), &readden, NULL), "ReadFile() succeeded\n");
++            ok(readden == 0, "got %d bytes\n", readden);
++            ok(GetLastError() == ERROR_NO_DATA, "GetLastError() returned %08x, expected ERROR_NO_DATA\n", GetLastError());
++        }
+ 
+         readden = 0xdeadbeef;
+         SetLastError(0xdeadbeef);
+@@ -2797,7 +2817,8 @@ START_TEST(pipe)
+     test_CreatePipe();
+     test_impersonation();
+     test_overlapped();
+-    test_nowait();
++    test_nowait(PIPE_TYPE_BYTE);
++    test_nowait(PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE);
+     test_NamedPipeHandleState();
+     test_readfileex_pending();
+ }
+diff --git a/dlls/ntdll/file.c b/dlls/ntdll/file.c
+index 569840e..5a8e83f 100644
+--- a/dlls/ntdll/file.c
++++ b/dlls/ntdll/file.c
+@@ -598,7 +598,7 @@ NTSTATUS WINAPI NtReadFile(HANDLE hFile, HANDLE hEvent,
+     enum server_fd_type type;
+     ULONG_PTR cvalue = apc ? 0 : (ULONG_PTR)apc_user;
+     BOOL send_completion = FALSE, async_read, timeout_init_done = FALSE, message_mode = FALSE;
+-    int message_mode_flags;
++    int message_mode_flags = 0;
+     struct msghdr msg;
+     struct iovec iov;
+ 
+@@ -659,6 +659,8 @@ NTSTATUS WINAPI NtReadFile(HANDLE hFile, HANDLE hEvent,
+     {
+         int sock_type = 0;
+         socklen_t sock_opt_len = sizeof(sock_type);
++        message_mode_flags = fcntl( unix_handle, F_GETSIG );
++
+         if (!getsockopt( unix_handle, SOL_SOCKET, SO_TYPE, &sock_type, &sock_opt_len ) &&
+                 sock_type == SOCK_SEQPACKET)
+         {
+@@ -669,7 +671,6 @@ NTSTATUS WINAPI NtReadFile(HANDLE hFile, HANDLE hEvent,
+             msg.msg_control     = NULL;
+             msg.msg_controllen  = 0;
+             msg.msg_flags       = 0;
+-            message_mode_flags  = fcntl( unix_handle, F_GETSIG );
+             message_mode        = TRUE;
+         }
+     }
+@@ -704,6 +705,8 @@ NTSTATUS WINAPI NtReadFile(HANDLE hFile, HANDLE hEvent,
+                 while (result > 0 && !ret);
+             }
+         }
++        else if (message_mode_flags & 2)
++            result = recv( unix_handle, (char *)buffer + total, length - total, MSG_DONTWAIT );
+         else
+             result = read( unix_handle, (char *)buffer + total, length - total );
+ 
+@@ -783,7 +786,7 @@ NTSTATUS WINAPI NtReadFile(HANDLE hFile, HANDLE hEvent,
+         }
+ 
+         /* don't wait in nowait mode */
+-        if (message_mode && (message_mode_flags & 0x02))
++        if (message_mode_flags & 0x02)
+         {
+             status = total ? STATUS_SUCCESS : STATUS_PIPE_EMPTY;
+             goto done;
+diff --git a/server/named_pipe.c b/server/named_pipe.c
+index 0cf365c..5a318c0 100644
+--- a/server/named_pipe.c
++++ b/server/named_pipe.c
+@@ -886,17 +886,13 @@ static struct object *named_pipe_open_file( struct object *obj, unsigned int acc
+             if (type != SOCK_SEQPACKET || (setsockopt( fds[0], SOL_SOCKET, SO_PEEK_OFF, &zero, sizeof(zero) ) != -1 &&
+                                            setsockopt( fds[1], SOL_SOCKET, SO_PEEK_OFF, &zero, sizeof(zero) ) != -1))
+             {
+-
+-                if (type == SOCK_SEQPACKET)
+-                {
+-                    int message_mode_flags = 0;
+-                    if (pipe->flags & NAMED_PIPE_MESSAGE_STREAM_READ)
+-                        message_mode_flags |= 0x01;
+-                    if (pipe->flags & NAMED_PIPE_NONBLOCKING_MODE)
+-                        message_mode_flags |= 0x02;
+-                    fcntl( fds[0], F_SETSIG, message_mode_flags );
+-                    fcntl( fds[1], F_SETSIG, 0x00 );
+-                }
++                int message_mode_flags = 0;
++                if (pipe->flags & NAMED_PIPE_MESSAGE_STREAM_READ)
++                    message_mode_flags |= 0x01;
++                if (pipe->flags & NAMED_PIPE_NONBLOCKING_MODE)
++                    message_mode_flags |= 0x02;
++                fcntl( fds[0], F_SETSIG, message_mode_flags );
++                fcntl( fds[1], F_SETSIG, 0x00 );
+ 
+                 client->fd = create_anonymous_fd( &pipe_client_fd_ops, fds[1], &client->obj, options );
+                 server->fd = create_anonymous_fd( &pipe_server_fd_ops, fds[0], &server->obj, server->options );
+-- 
+1.7.9.5
+

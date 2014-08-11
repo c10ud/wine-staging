@@ -1,4 +1,4 @@
-From e7dd1a77ec81646bffa4fb8b19a03adb3f6d9041 Mon Sep 17 00:00:00 2001
+From 062c2508251c1aa42c5635aa734a16893c35e6a1 Mon Sep 17 00:00:00 2001
 From: Sebastian Lackner <sebastian@fds-team.de>
 Date: Mon, 4 Aug 2014 05:01:11 +0200
 Subject: server: Use SOCK_SEQPACKET socket in combination with SO_PEEK_OFF to

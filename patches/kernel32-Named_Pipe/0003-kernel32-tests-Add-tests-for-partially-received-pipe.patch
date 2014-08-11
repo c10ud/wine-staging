@@ -1,4 +1,4 @@
-From 9d078845ac266e332ac1abf6f2cbd4f157717875 Mon Sep 17 00:00:00 2001
+From 1599e26ea6aa5bf535b445fe3699d14ba6f9cec7 Mon Sep 17 00:00:00 2001
 From: Sebastian Lackner <sebastian@fds-team.de>
 Date: Wed, 30 Jul 2014 21:52:38 +0200
 Subject: kernel32/tests: Add tests for partially received pipe messages

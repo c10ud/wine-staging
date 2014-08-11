@@ -1,4 +1,4 @@
-From 3f4b6f6f72be7a15be544a25dbec286f844903ba Mon Sep 17 00:00:00 2001
+From 3ed4f942b9a9d5fd4318bbaff7241429772c7fae Mon Sep 17 00:00:00 2001
 From: Sebastian Lackner <sebastian@fds-team.de>
 Date: Mon, 4 Aug 2014 00:29:26 +0200
 Subject: server: Show warning if message mode is not supported.

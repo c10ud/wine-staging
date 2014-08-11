@@ -1,4 +1,4 @@
-From 465cfc3f65280c5b71bcec33c53c8374bff02f67 Mon Sep 17 00:00:00 2001
+From 1a4d58cc63f6f536cf069741184e35af2bbfa4f0 Mon Sep 17 00:00:00 2001
 From: "Erich E. Hoover" <erich.e.hoover@gmail.com>
 Date: Mon, 4 Aug 2014 05:23:00 +0200
 Subject: server: Store the message read-mode for a pipe in the file

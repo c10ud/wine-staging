@@ -1,4 +1,4 @@
-From 2afaf7f0ef2201e6b68ad2d8b76268a763402349 Mon Sep 17 00:00:00 2001
+From 0f2194bfa10c52f725707cb83092cba33900d75e Mon Sep 17 00:00:00 2001
 From: Sebastian Lackner <sebastian@fds-team.de>
 Date: Sun, 10 Aug 2014 00:02:16 +0200
 Subject: kernel32/tests: Add additional tests for multithreaded partial reads

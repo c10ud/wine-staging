@@ -1,4 +1,4 @@
-From fc25e3747d153ebcd73d690a0b2fac82128fe998 Mon Sep 17 00:00:00 2001
+From 7641752462480e996379698558944f6373f86bbe Mon Sep 17 00:00:00 2001
 From: Sebastian Lackner <sebastian@fds-team.de>
 Date: Sun, 3 Aug 2014 23:14:35 +0200
 Subject: kernel32/tests: Add tests for sending and receiving large messages.

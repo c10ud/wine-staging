@@ -1,4 +1,4 @@
-From 3fd30b6f3122ce48daea009121d0135aaceb30e7 Mon Sep 17 00:00:00 2001
+From 6acf94b553352c054c45c0e96ec85f48bfc6d3c9 Mon Sep 17 00:00:00 2001
 From: "Erich E. Hoover" <erich.e.hoover@gmail.com>
 Date: Mon, 4 Aug 2014 06:00:21 +0200
 Subject: kernel32: Add implementation of SetNamedPipeHandleState.

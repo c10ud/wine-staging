@@ -1,4 +1,4 @@
-From e037c2f3bdb9505199c5c5c196a70a78fd6e74e1 Mon Sep 17 00:00:00 2001
+From a009496ee6e42daebb808d577e24faa3429407ce Mon Sep 17 00:00:00 2001
 From: Sebastian Lackner <sebastian@fds-team.de>
 Date: Thu, 31 Jul 2014 00:28:59 +0200
 Subject: kernel32/tests: Add tests for PeekNamedPipe with partial received
