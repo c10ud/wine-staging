@@ -1,4 +1,4 @@
-From 1b5541a00fc11034d78c259ee333b5e97ec86f8c Mon Sep 17 00:00:00 2001
+From 78dfdf8ff4fed47823c31a5ed4595f0ecc34ae9f Mon Sep 17 00:00:00 2001
 From: Sebastian Lackner <sebastian@fds-team.de>
 Date: Sun, 10 Aug 2014 03:44:34 +0200
 Subject: server: Don't use application buffer size for message mode buffers.
@@ -15,10 +15,10 @@ greater than the pipe buffer size ...
  2 files changed, 18 insertions(+), 10 deletions(-)
 
 diff --git a/dlls/ntdll/file.c b/dlls/ntdll/file.c
-index 9b16802..3fe35dd 100644
+index 16d155a..50b6d6f 100644
 --- a/dlls/ntdll/file.c
 +++ b/dlls/ntdll/file.c
-@@ -1138,8 +1138,8 @@ NTSTATUS WINAPI NtWriteFile(HANDLE hFile, HANDLE hEvent,
+@@ -1132,8 +1132,8 @@ NTSTATUS WINAPI NtWriteFile(HANDLE hFile, HANDLE hEvent,
              {
                  if (msgsize == (ULONG)-1)
                  {
@@ -30,7 +30,7 @@ index 9b16802..3fe35dd 100644
  
                  /* FIXME: inefficient loop - max named pipe message size should be cached! */
 diff --git a/server/named_pipe.c b/server/named_pipe.c
-index 85b9f74..124b378 100644
+index 67ca8b5..f5060de 100644
 --- a/server/named_pipe.c
 +++ b/server/named_pipe.c
 @@ -864,15 +864,23 @@ static struct object *named_pipe_open_file( struct object *obj, unsigned int acc

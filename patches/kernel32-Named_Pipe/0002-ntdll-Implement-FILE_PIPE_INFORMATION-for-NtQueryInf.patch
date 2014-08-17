@@ -1,8 +1,17 @@
-From 2d4b0fbaa70aa411c3b028a6defccdaec170107a Mon Sep 17 00:00:00 2001
+From d0ce619b7bb438f99fd15076ae4b32198bfde2b7 Mon Sep 17 00:00:00 2001
 From: Adam Martinson <adam.r.martinson@gmail.com>
-Date: Mon, 11 Aug 2014 16:22:02 +0200
+Date: Tue, 12 Aug 2014 21:29:47 +0200
 Subject: ntdll: Implement FILE_PIPE_INFORMATION for NtQueryInformationFile.
 
+This is a subset of my current work-in-progress named pipe message mode
+patches, see: http://bugs.winehq.org/show_bug.cgi?id=17195#c157
+
+Please note that none of the patches in this series focuses on a specific
+implementation of message mode pipes yet - whatever finally is used, we
+always need the redirection kernel32 -> ntdll -> wineserver.
+
+This first patch (by Adam Martinson) implements FILE_PIPE_INFORMATION
+based on the existing get_named_pipe_info wineserver call.
 ---
  dlls/ntdll/file.c  |   22 ++++++++++++++++++++--
  include/winternl.h |   11 +++++++++++

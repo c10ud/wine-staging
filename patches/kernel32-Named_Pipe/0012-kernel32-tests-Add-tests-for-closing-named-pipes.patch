@@ -1,17 +1,19 @@
-From b54a6e48cdd49cda30857f0de0b1421cb47de457 Mon Sep 17 00:00:00 2001
+From 4c9b82b304f76a57cfca49fe2235501ba0a29c7e Mon Sep 17 00:00:00 2001
 From: Adam Martinson <adam.r.martinson@gmail.com>
 Date: Tue, 18 Dec 2012 15:52:57 -0600
 Subject: kernel32/tests: Add tests for closing named pipes.
 
+Changes in v2:
+  * Add SetLastError().
 ---
- dlls/kernel32/tests/pipe.c |   93 ++++++++++++++++++++++++++++++++++++++++++++
- 1 file changed, 93 insertions(+)
+ dlls/kernel32/tests/pipe.c |   95 ++++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 95 insertions(+)
 
 diff --git a/dlls/kernel32/tests/pipe.c b/dlls/kernel32/tests/pipe.c
-index 3f0420d..69c1586 100644
+index 2527508..0930f68 100644
 --- a/dlls/kernel32/tests/pipe.c
 +++ b/dlls/kernel32/tests/pipe.c
-@@ -923,6 +923,98 @@ static void test_CreateNamedPipe_instances_must_match(void)
+@@ -923,6 +923,100 @@ static void test_CreateNamedPipe_instances_must_match(void)
      ok(CloseHandle(hnp2), "CloseHandle\n");
  }
  
@@ -58,6 +60,7 @@ index 3f0420d..69c1586 100644
 +        ok(readden == sizeof(obuf), "got %d bytes\n", readden);
 +        /* pipe is empty now */
 +
++        SetLastError(0xdeadbeef);
 +        ok(!ReadFile(hFile, ibuf, 0, &readden, NULL), "ReadFile() succeeded\n");
 +        ok(GetLastError() == ERROR_BROKEN_PIPE, "GetLastError() returned %08x, expected ERROR_BROKEN_PIPE\n", GetLastError());
 +        SetLastError(0);
@@ -99,6 +102,7 @@ index 3f0420d..69c1586 100644
 +        ok(readden == sizeof(obuf), "got %d bytes\n", readden);
 +        /* pipe is empty now */
 +
++        SetLastError(0xdeadbeef);
 +        ok(!ReadFile(hnp, ibuf, 0, &readden, NULL), "ReadFile() succeeded\n");
 +        ok(GetLastError() == ERROR_BROKEN_PIPE, "GetLastError() returned %08x, expected ERROR_BROKEN_PIPE\n", GetLastError());
 +        SetLastError(0);
@@ -110,7 +114,7 @@ index 3f0420d..69c1586 100644
  /** implementation of alarm() */
  static DWORD CALLBACK alarmThreadMain(LPVOID arg)
  {
-@@ -2419,6 +2511,7 @@ START_TEST(pipe)
+@@ -2429,6 +2523,7 @@ START_TEST(pipe)
      test_NamedPipe_2();
      test_CreateNamedPipe(PIPE_TYPE_BYTE);
      test_CreateNamedPipe(PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE);

@@ -1,4 +1,4 @@
-From 7a4aee604842277183d7bc3c1ba84c494a5debcc Mon Sep 17 00:00:00 2001
+From 08623d7f302b54b34748f4e7f8d6f5a941402ab9 Mon Sep 17 00:00:00 2001
 From: Sebastian Lackner <sebastian@fds-team.de>
 Date: Thu, 31 Jul 2014 00:28:59 +0200
 Subject: kernel32/tests: Add tests for PeekNamedPipe with partial received
@@ -11,12 +11,15 @@ information from all threads.
 
 Changes in v2:
   * Also add tests for reverse direction.
+
+Changes in v3:
+  * Fix compiler warning on x86_64.
 ---
  dlls/kernel32/tests/pipe.c |  142 +++++++++++++++++++++++++++++++++++++++++++-
  1 file changed, 140 insertions(+), 2 deletions(-)
 
 diff --git a/dlls/kernel32/tests/pipe.c b/dlls/kernel32/tests/pipe.c
-index 95979c1..501ca89 100644
+index 87df5d8..cfd167a 100644
 --- a/dlls/kernel32/tests/pipe.c
 +++ b/dlls/kernel32/tests/pipe.c
 @@ -46,7 +46,8 @@ static void CALLBACK user_apc(ULONG_PTR param)
@@ -30,30 +33,30 @@ index 95979c1..501ca89 100644
  
  struct rpcThreadArgs
 @@ -54,7 +55,7 @@ struct rpcThreadArgs
-     PVOID returnValue;
+     ULONG_PTR returnValue;
      DWORD lastError;
      enum rpcThreadOp op;
--    PVOID args[5];
-+    PVOID args[6];
+-    ULONG_PTR args[5];
++    ULONG_PTR args[6];
  };
  
  static DWORD CALLBACK rpcThreadMain(LPVOID arg)
 @@ -73,6 +74,15 @@ static DWORD CALLBACK rpcThreadMain(LPVOID arg)
-                                                     (LPOVERLAPPED)rpcargs->args[4] ); /* overlapped */
+                                                         (LPOVERLAPPED)rpcargs->args[4] ); /* overlapped */
              break;
  
 +        case RPC_PEEKNAMEDPIPE:
-+            rpcargs->returnValue = (PVOID)PeekNamedPipe( (HANDLE)rpcargs->args[0],    /* hPipe */
-+                                                         (LPVOID)rpcargs->args[1],    /* lpvBuffer */
-+                                                         (DWORD)rpcargs->args[2],     /* cbBuffer */
-+                                                         (LPDWORD)rpcargs->args[3],   /* lpcbRead */
-+                                                         (LPDWORD)rpcargs->args[4],   /* lpcbAvail */
-+                                                         (LPDWORD)rpcargs->args[5] ); /* lpcbMessage */
++            rpcargs->returnValue = (ULONG_PTR)PeekNamedPipe( (HANDLE)rpcargs->args[0],    /* hPipe */
++                                                             (LPVOID)rpcargs->args[1],    /* lpvBuffer */
++                                                             (DWORD)rpcargs->args[2],     /* cbBuffer */
++                                                             (LPDWORD)rpcargs->args[3],   /* lpcbRead */
++                                                             (LPDWORD)rpcargs->args[4],   /* lpcbAvail */
++                                                             (LPDWORD)rpcargs->args[5] ); /* lpcbMessage */
 +            break;
 +
          default:
              SetLastError( ERROR_CALL_NOT_IMPLEMENTED );
-             rpcargs->returnValue = NULL;
+             rpcargs->returnValue = 0;
 @@ -109,6 +119,33 @@ static BOOL RpcReadFile(HANDLE hFile, LPVOID buffer, DWORD bytesToRead, LPDWORD
      return (BOOL)rpcargs.returnValue;
  }
@@ -66,15 +69,15 @@ index 95979c1..501ca89 100644
 +    HANDLE thread;
 +    DWORD threadId;
 +
-+    rpcargs.returnValue = NULL;
++    rpcargs.returnValue = 0;
 +    rpcargs.lastError = GetLastError();
 +    rpcargs.op = RPC_PEEKNAMEDPIPE;
-+    rpcargs.args[0] = (PVOID)hPipe;
-+    rpcargs.args[1] = (PVOID)lpvBuffer;
-+    rpcargs.args[2] = (PVOID)cbBuffer;
-+    rpcargs.args[3] = (PVOID)lpcbRead;
-+    rpcargs.args[4] = (PVOID)lpcbAvail;
-+    rpcargs.args[5] = (PVOID)lpcbMessage;
++    rpcargs.args[0] = (ULONG_PTR)hPipe;
++    rpcargs.args[1] = (ULONG_PTR)lpvBuffer;
++    rpcargs.args[2] = (ULONG_PTR)cbBuffer;
++    rpcargs.args[3] = (ULONG_PTR)lpcbRead;
++    rpcargs.args[4] = (ULONG_PTR)lpcbAvail;
++    rpcargs.args[5] = (ULONG_PTR)lpcbMessage;
 +
 +    thread = CreateThread(NULL, 0, rpcThreadMain, (void *)&rpcargs, 0, &threadId);
 +    ok(thread != NULL, "CreateThread failed. %d\n", GetLastError());

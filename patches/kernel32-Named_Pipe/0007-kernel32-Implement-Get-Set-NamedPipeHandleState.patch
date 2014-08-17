@@ -1,4 +1,4 @@
-From 963a82fc64db04373f983321c089b979d4777c44 Mon Sep 17 00:00:00 2001
+From 5f30a55ce7b884a283be7a9566641de180a8682c Mon Sep 17 00:00:00 2001
 From: Sebastian Lackner <sebastian@fds-team.de>
 Date: Mon, 11 Aug 2014 17:26:18 +0200
 Subject: kernel32: Implement {Get,Set}NamedPipeHandleState.
@@ -129,7 +129,7 @@ index ff0e234..96a36b9 100644
  
  /***********************************************************************
 diff --git a/dlls/kernel32/tests/pipe.c b/dlls/kernel32/tests/pipe.c
-index c19456e..e6362c6 100644
+index 5790be8..46004a3 100644
 --- a/dlls/kernel32/tests/pipe.c
 +++ b/dlls/kernel32/tests/pipe.c
 @@ -218,10 +218,8 @@ static void test_CreateNamedPipe(int pipemode)

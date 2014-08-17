@@ -1,4 +1,4 @@
-From 5ab111969b595d30f7241b8a359f215b335be474 Mon Sep 17 00:00:00 2001
+From 97c03c03534f16975040262d9212af6a7aa67e45 Mon Sep 17 00:00:00 2001
 From: Sebastian Lackner <sebastian@fds-team.de>
 Date: Mon, 11 Aug 2014 18:20:52 +0200
 Subject: ntdll: Add handling for partially received messages in NtReadFile.
@@ -8,14 +8,14 @@ Changes in v2:
   * Poll for broken pipe to distinguish between zero-byte messages and errors.
 
 Changes in v3:
-  * Rebased.
+  * Rebased. Simplified check for broken pipe.
 ---
- dlls/kernel32/tests/pipe.c |   50 ++++------------------------------------
- dlls/ntdll/file.c          |   54 ++++++++++++++++++++++++++++++++++++++++++--
- 2 files changed, 57 insertions(+), 47 deletions(-)
+ dlls/kernel32/tests/pipe.c |   53 +++++---------------------------------------
+ dlls/ntdll/file.c          |   23 ++++++++++++++-----
+ 2 files changed, 23 insertions(+), 53 deletions(-)
 
 diff --git a/dlls/kernel32/tests/pipe.c b/dlls/kernel32/tests/pipe.c
-index 6e464dc..beaaf88 100644
+index 3b04e66..c1d406d 100644
 --- a/dlls/kernel32/tests/pipe.c
 +++ b/dlls/kernel32/tests/pipe.c
 @@ -304,9 +304,7 @@ static void test_CreateNamedPipe(int pipemode)
@@ -212,7 +212,7 @@ index 6e464dc..beaaf88 100644
          ok(ReadFile(hFile, ibuf, 0, &readden, NULL), "ReadFile() failed: %08x\n", GetLastError());
          ok(readden == 0, "got %d bytes\n", readden);
  
-@@ -989,7 +950,6 @@ static void test_CloseNamedPipe(void)
+@@ -990,7 +951,6 @@ static void test_CloseNamedPipe(void)
          ok(CloseHandle(hFile), "CloseHandle() failed: %08x\n", GetLastError());
  
          /* you'd think ERROR_MORE_DATA, but no */
@@ -220,98 +220,95 @@ index 6e464dc..beaaf88 100644
          ok(ReadFile(hnp, ibuf, 0, &readden, NULL), "ReadFile() failed: %08x\n", GetLastError());
          ok(readden == 0, "got %d bytes\n", readden);
  
+@@ -2464,7 +2424,6 @@ static void test_readfileex_pending(void)
+     num_bytes = 0xdeadbeef;
+     SetLastError(0xdeadbeef);
+     ret = ReadFile(server, read_buf, 0, &num_bytes, &overlapped);
+-todo_wine
+     ok(GetLastError() == ERROR_IO_PENDING, "expected ERROR_IO_PENDING, got %d\n", GetLastError());
+     ok(num_bytes == 0, "bytes %u\n", num_bytes);
+     ok((NTSTATUS)overlapped.Internal == STATUS_PENDING, "expected STATUS_PENDING, got %#lx\n", overlapped.Internal);
+@@ -2480,11 +2439,9 @@ todo_wine
+     ok(num_bytes == 1, "bytes %u\n", num_bytes);
+ 
+     wait = WaitForSingleObject(event, 100);
+-todo_wine
+     ok(wait == WAIT_OBJECT_0, "WaitForSingleObject returned %x\n", wait);
+ 
+     ok(num_bytes == 1, "bytes %u\n", num_bytes);
+-todo_wine
+     ok((NTSTATUS)overlapped.Internal == STATUS_SUCCESS, "expected STATUS_SUCCESS, got %#lx\n", overlapped.Internal);
+     ok(overlapped.InternalHigh == 0, "expected 0, got %lu\n", overlapped.InternalHigh);
+ 
 diff --git a/dlls/ntdll/file.c b/dlls/ntdll/file.c
-index 3fe35dd..2bb960a 100644
+index 50b6d6f..16d7b45 100644
 --- a/dlls/ntdll/file.c
 +++ b/dlls/ntdll/file.c
-@@ -668,6 +668,11 @@ NTSTATUS WINAPI NtReadFile(HANDLE hFile, HANDLE hEvent,
-             msg.msg_controllen  = 0;
-             msg.msg_flags       = 0;
-         }
-+        else
-+        {
-+            /* shouldn't happen */
-+            message_mode_flags &= ~NAMED_PIPE_MESSAGE_STREAM_READ;
-+        }
+@@ -370,7 +370,7 @@ NTSTATUS FILE_GetNtStatus(void)
      }
+ }
  
-     for (;;)
-@@ -702,7 +707,9 @@ NTSTATUS WINAPI NtReadFile(HANDLE hFile, HANDLE hEvent,
+-/* helper function for FSCTL_PIPE_PEEK */
++/* helper function for FSCTL_PIPE_PEEK and read_unix_fd */
+ static NTSTATUS unix_fd_avail(int fd, int *avail)
+ {
+     struct pollfd pollfd;
+@@ -404,7 +404,11 @@ static NTSTATUS read_unix_fd(int fd, char *buf, ULONG *total, ULONG length,
+     int pipe_flags = 0, result;
+ 
+     if (type == FD_TYPE_PIPE)
++    {
+         pipe_flags = fcntl( fd, F_GETSIG );
++        if (!(pipe_flags & NAMED_PIPE_MESSAGE_STREAM_WRITE))
++            pipe_flags &= ~NAMED_PIPE_MESSAGE_STREAM_READ;
++    }
+ 
+     for(;;)
+     {
+@@ -435,10 +439,12 @@ static NTSTATUS read_unix_fd(int fd, char *buf, ULONG *total, ULONG length,
          if (result >= 0)
          {
-             total += result;
--            if (!result || total == length)
-+            /* In message mode we stop as soon as we reach a message boundary */
-+            if (!result || total == length || ((message_mode_flags & NAMED_PIPE_MESSAGE_STREAM_READ) &&
-+                                               !(msg.msg_flags & MSG_TRUNC)))
+             *total += result;
+-            if (!result || *total >= length || (avail_mode && !(pipe_flags & NAMED_PIPE_MESSAGE_STREAM_WRITE)))
++            if (!result || *total >= length || (avail_mode && !(pipe_flags & NAMED_PIPE_MESSAGE_STREAM_WRITE)) ||
++                ((pipe_flags & NAMED_PIPE_MESSAGE_STREAM_READ) && !(msg.msg_flags & MSG_TRUNC)))
              {
-                 if (total)
+                 if (*total)
+-                    return STATUS_SUCCESS;
++                    return ((pipe_flags & NAMED_PIPE_MESSAGE_STREAM_READ) && (msg.msg_flags & MSG_TRUNC)) ?
++                           STATUS_BUFFER_OVERFLOW : STATUS_SUCCESS;
+                 switch (type)
                  {
-@@ -717,13 +724,52 @@ NTSTATUS WINAPI NtReadFile(HANDLE hFile, HANDLE hEvent,
-                     goto done;
+                 case FD_TYPE_FILE:
+@@ -446,11 +452,18 @@ static NTSTATUS read_unix_fd(int fd, char *buf, ULONG *total, ULONG length,
+                     return length ? STATUS_END_OF_FILE : STATUS_SUCCESS;
                  case FD_TYPE_SERIAL:
-                     break;
+                     return STATUS_PENDING;
 +                case FD_TYPE_PIPE:
 +                    {
-+                        int avail = 0;
-+#ifdef FIONREAD
-+                        if (ioctl( unix_handle, FIONREAD, &avail ) != 0)
-+                        {
-+                            TRACE("FIONREAD failed reason: %s\n",strerror(errno));
-+                            status = STATUS_PIPE_BROKEN;
-+                            goto done;
-+                        }
-+#endif
-+                        /* When more data is available, we don't return STATUS_PIPE_BROKEN yet. */
-+                        if (avail)
-+                        {
-+                            status = STATUS_SUCCESS;
-+                            goto done;
-+                        }
-+
-+                        /* In message mode we have to differentiate between a message of size zero, and a
-+                         * broken pipe - so always call poll() to find out if the pipe is still okay. Please
-+                         * note that we cannot find out, if any zero-byte messages are still in there. */
-+                        if (message_mode_flags & NAMED_PIPE_MESSAGE_STREAM_WRITE)
-+                        {
-+                            struct pollfd pollfd;
-+                            int ret;
-+
-+                            pollfd.fd = unix_handle;
-+                            pollfd.events = POLLIN;
-+                            pollfd.revents = 0;
-+                            ret = poll( &pollfd, 1, 0 );
-+                            if (ret != -1 && (ret != 1 || !(pollfd.revents & (POLLHUP|POLLERR))))
-+                            {
-+                                status = STATUS_SUCCESS;
-+                                goto done;
-+                            }
-+                        }
++                        NTSTATUS status = unix_fd_avail( fd, &result );
++                        if (!status && !result) status = STATUS_PENDING;
++                        return status;
 +                    }
-+                    /* fall-through */
                  default:
-                     status = STATUS_PIPE_BROKEN;
-                     goto done;
+                     return STATUS_PIPE_BROKEN;
                  }
              }
-             else if (type == FD_TYPE_FILE) continue;  /* no async I/O on regular files */
--            else if (message_mode_flags & NAMED_PIPE_MESSAGE_STREAM_WRITE) continue; /* concatenate with next message */
-+            else if ((message_mode_flags & (NAMED_PIPE_MESSAGE_STREAM_WRITE | NAMED_PIPE_MESSAGE_STREAM_READ)) ==
-+                     NAMED_PIPE_MESSAGE_STREAM_WRITE) continue; /* concatenate with next message */
-         }
-         else if (errno != EAGAIN)
-         {
-@@ -816,6 +862,10 @@ err:
+-            else if (pipe_flags & NAMED_PIPE_MESSAGE_STREAM_WRITE)
++            else if ((pipe_flags & (NAMED_PIPE_MESSAGE_STREAM_WRITE | NAMED_PIPE_MESSAGE_STREAM_READ)) ==
++                     NAMED_PIPE_MESSAGE_STREAM_WRITE)
+                 continue;
+             else if (type != FD_TYPE_FILE) /* no async I/O on regular files */
+                 return STATUS_PENDING;
+@@ -808,7 +821,7 @@ done:
+ 
+ err:
      if (needs_close) close( unix_handle );
-     if (status == STATUS_SUCCESS || (status == STATUS_END_OF_FILE && !async_read))
+-    if (status == STATUS_SUCCESS || (status == STATUS_END_OF_FILE && !async_read))
++    if (status == STATUS_SUCCESS || status == STATUS_BUFFER_OVERFLOW || (status == STATUS_END_OF_FILE && !async_read))
      {
-+        /* When total == 0, then Windows doesn't return STATUS_MORE_ENTRIES although it was splitted */
-+        if (total && (message_mode_flags & NAMED_PIPE_MESSAGE_STREAM_READ) && (msg.msg_flags & MSG_TRUNC))
-+            status = STATUS_MORE_ENTRIES;
-+
          io_status->u.Status = status;
          io_status->Information = total;
-         TRACE("= SUCCESS (%u)\n", total);
 -- 
 1.7.9.5
 

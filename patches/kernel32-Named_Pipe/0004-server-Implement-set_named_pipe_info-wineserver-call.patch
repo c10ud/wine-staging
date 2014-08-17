@@ -1,10 +1,19 @@
-From 41d7d462cb8103762160f6e2137bdb4b612378cd Mon Sep 17 00:00:00 2001
+From a55583195f9aa69ae997f375da22d483fbf12c82 Mon Sep 17 00:00:00 2001
 From: Sebastian Lackner <sebastian@fds-team.de>
-Date: Mon, 11 Aug 2014 17:06:49 +0200
+Date: Tue, 12 Aug 2014 21:30:34 +0200
 Subject: server: Implement set_named_pipe_info wineserver call for
  NtSetInformationFile/FilePipeInformation.
 
 Based on patch by Adam Martinson.
+
+This patch adds a new wineserver call set_named_pipe_info to change the properties
+stored in server->pipe_flags or client->pipe_flags. This request is then used to
+implement NtSetInformationFile(FilePipeInformation, ...)
+
+Invalid combinations (like requesting read message mode when using a byte mode pipe)
+are rejected with STATUS_INVALID_PARAMETER.
+
+Requires ./tools/make_requests
 ---
  dlls/ntdll/file.c   |   23 +++++++++++++++++++++++
  server/named_pipe.c |   38 ++++++++++++++++++++++++++++++++++++++

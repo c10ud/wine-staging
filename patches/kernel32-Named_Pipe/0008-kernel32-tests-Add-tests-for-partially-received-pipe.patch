@@ -1,4 +1,4 @@
-From 98d4321bea13eb2d43b3effc418068434b19eba2 Mon Sep 17 00:00:00 2001
+From 4c06870aab728e6da9172f2936e00711e1607782 Mon Sep 17 00:00:00 2001
 From: Sebastian Lackner <sebastian@fds-team.de>
 Date: Wed, 30 Jul 2014 21:52:38 +0200
 Subject: kernel32/tests: Add tests for partially received pipe messages
@@ -12,7 +12,7 @@ Changes in v2:
  1 file changed, 107 insertions(+), 1 deletion(-)
 
 diff --git a/dlls/kernel32/tests/pipe.c b/dlls/kernel32/tests/pipe.c
-index e6362c6..2b47eda 100644
+index 46004a3..44e993d 100644
 --- a/dlls/kernel32/tests/pipe.c
 +++ b/dlls/kernel32/tests/pipe.c
 @@ -127,6 +127,21 @@ static void test_CreateNamedPipe(int pipemode)

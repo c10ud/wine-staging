@@ -1,19 +1,18 @@
-From d07bcf13d581194cda2b78b9facaf23a585f2e78 Mon Sep 17 00:00:00 2001
+From 595792bb8081cfe93de68a2fe298f1bb73268ec3 Mon Sep 17 00:00:00 2001
 From: Sebastian Lackner <sebastian@fds-team.de>
-Date: Mon, 11 Aug 2014 15:35:50 +0200
+Date: Tue, 12 Aug 2014 21:29:59 +0200
 Subject: server: Store pipe_flags in a separate variable for both server and
  client of named pipes.
 
-The existing implementation didn't differentiate between global and local flags.
+One global "flags" member for a pipe is not sufficient to store different values
+for each opened server/connection. This patch adds an additional pipe_flags member
+to both the server and client.
 
-* 'message mode write' is a global flag, and should be stored in pipe->flags.
+pipe->flags contain attributes which are valid for all servers/client - the
+server->pipe_flags and client->pipe_flags values are separate for each connection.
 
-* 'message mode read' and 'non-blocking mode' are local flags and should be stored
-  for each server/client separately.
-
-When requesting pipe information with get_named_pipe_info we return the information
-of a specific server/client, instead of the pipe itself, to keep the old behaviour. This
-also allows reusing this wineserver call for other purposes later.
+When requesting get_named_pipe_info then return the information for the specific
+instance, instead of the global information.
 ---
  server/named_pipe.c |   16 ++++++++++------
  1 file changed, 10 insertions(+), 6 deletions(-)

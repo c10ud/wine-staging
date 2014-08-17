@@ -1,49 +1,17 @@
-From 0218d173d333114bf91ea1492423d8091ea438c2 Mon Sep 17 00:00:00 2001
+From 84941d208b21871a2437317473e0e47d4ebbe1f4 Mon Sep 17 00:00:00 2001
 From: Sebastian Lackner <sebastian@fds-team.de>
 Date: Mon, 11 Aug 2014 04:19:49 +0200
 Subject: kernel32/tests: Add tests for PIPE_NOWAIT in message mode.
 
 ---
- dlls/kernel32/tests/pipe.c |  100 ++++++++++++++++++++++++++++++++++++++++++++
- 1 file changed, 100 insertions(+)
+ dlls/kernel32/tests/pipe.c |   96 ++++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 96 insertions(+)
 
 diff --git a/dlls/kernel32/tests/pipe.c b/dlls/kernel32/tests/pipe.c
-index c80d2af..29430a0 100644
+index a250f94..a63ba32 100644
 --- a/dlls/kernel32/tests/pipe.c
 +++ b/dlls/kernel32/tests/pipe.c
-@@ -1077,6 +1077,7 @@ static void test_CloseNamedPipe(void)
-         ok(readden == sizeof(obuf), "got %d bytes\n", readden);
-         /* pipe is empty now */
- 
-+        SetLastError(0xdeadbeef);
-         ok(!ReadFile(hFile, ibuf, 0, &readden, NULL), "ReadFile() succeeded\n");
-         ok(GetLastError() == ERROR_BROKEN_PIPE, "GetLastError() returned %08x, expected ERROR_BROKEN_PIPE\n", GetLastError());
-         SetLastError(0);
-@@ -1110,6 +1111,7 @@ static void test_CloseNamedPipe(void)
-         ok(readden == 0, "got %d bytes\n", readden);
-         /* pipe is empty now */
- 
-+        SetLastError(0xdeadbeef);
-         ok(!ReadFile(hFile, ibuf, sizeof(ibuf), &readden, NULL), "ReadFile() succeeded\n");
-         todo_wine
-         ok(GetLastError() == ERROR_BROKEN_PIPE, "GetLastError() returned %08x, expected ERROR_BROKEN_PIPE\n", GetLastError());
-@@ -1151,6 +1153,7 @@ static void test_CloseNamedPipe(void)
-         ok(readden == sizeof(obuf), "got %d bytes\n", readden);
-         /* pipe is empty now */
- 
-+        SetLastError(0xdeadbeef);
-         ok(!ReadFile(hnp, ibuf, 0, &readden, NULL), "ReadFile() succeeded\n");
-         ok(GetLastError() == ERROR_BROKEN_PIPE, "GetLastError() returned %08x, expected ERROR_BROKEN_PIPE\n", GetLastError());
-         SetLastError(0);
-@@ -1184,6 +1187,7 @@ static void test_CloseNamedPipe(void)
-         ok(readden == 0, "got %d bytes\n", readden);
-         /* pipe is empty now */
- 
-+        SetLastError(0xdeadbeef);
-         ok(!ReadFile(hnp, ibuf, sizeof(ibuf), &readden, NULL), "ReadFile() succeeded\n");
-         ok(GetLastError() == ERROR_BROKEN_PIPE, "GetLastError() returned %08x, expected ERROR_BROKEN_PIPE\n", GetLastError());
-         SetLastError(0);
-@@ -2415,6 +2419,101 @@ static void test_overlapped(void)
+@@ -2527,6 +2527,101 @@ static void test_overlapped(void)
      CloseHandle(thread);
  }
  
@@ -145,7 +113,7 @@ index c80d2af..29430a0 100644
  static void test_NamedPipeHandleState(void)
  {
      HANDLE server, client;
-@@ -2692,6 +2791,7 @@ START_TEST(pipe)
+@@ -2956,6 +3051,7 @@ START_TEST(pipe)
      test_CreatePipe();
      test_impersonation();
      test_overlapped();

@@ -1,4 +1,4 @@
-From f638980305e10bb66e8656a9ca1ce3639761d6fe Mon Sep 17 00:00:00 2001
+From 13e27e178b7866439acb3264f3e9915dd48dbac2 Mon Sep 17 00:00:00 2001
 From: Sebastian Lackner <sebastian@fds-team.de>
 Date: Mon, 11 Aug 2014 05:34:19 +0200
 Subject: kernel32: Allow to set PIPE_NOWAIT on byte-mode pipes.
@@ -12,10 +12,10 @@ matches the native implementation.
  2 files changed, 31 insertions(+), 8 deletions(-)
 
 diff --git a/dlls/kernel32/tests/pipe.c b/dlls/kernel32/tests/pipe.c
-index 29430a0..e8b0067 100644
+index a63ba32..334e867 100644
 --- a/dlls/kernel32/tests/pipe.c
 +++ b/dlls/kernel32/tests/pipe.c
-@@ -2419,7 +2419,7 @@ static void test_overlapped(void)
+@@ -2527,7 +2527,7 @@ static void test_overlapped(void)
      CloseHandle(thread);
  }
  
@@ -24,7 +24,7 @@ index 29430a0..e8b0067 100644
  {
      HANDLE hnp;
      HANDLE hFile;
-@@ -2430,7 +2430,7 @@ static void test_nowait(void)
+@@ -2538,7 +2538,7 @@ static void test_nowait(void)
      DWORD lpmode;
  
      hnp = CreateNamedPipeA(PIPENAME, PIPE_ACCESS_DUPLEX,
@@ -33,7 +33,7 @@ index 29430a0..e8b0067 100644
                             /* nMaxInstances */ 1,
                             /* nOutBufSize */ 1024,
                             /* nInBufSize */ 1024,
-@@ -2461,7 +2461,7 @@ static void test_nowait(void)
+@@ -2569,7 +2569,7 @@ static void test_nowait(void)
          ok(readden == 0, "got %d bytes\n", readden);
          ok(GetLastError() == ERROR_NO_DATA, "GetLastError() returned %08x, expected ERROR_NO_DATA\n", GetLastError());
  
@@ -42,7 +42,7 @@ index 29430a0..e8b0067 100644
          ok(SetNamedPipeHandleState(hFile, &lpmode, NULL, NULL), "Change mode\n");
  
          /* send message from server to client */
-@@ -2485,8 +2485,18 @@ static void test_nowait(void)
+@@ -2593,8 +2593,18 @@ static void test_nowait(void)
          ok(WriteFile(hFile, obuf, 0, &written, NULL), "WriteFile\n");
          ok(written == 0, "write file len\n");
  
@@ -63,7 +63,7 @@ index 29430a0..e8b0067 100644
  
          readden = 0xdeadbeef;
          SetLastError(0xdeadbeef);
-@@ -2498,8 +2508,18 @@ static void test_nowait(void)
+@@ -2606,8 +2616,18 @@ static void test_nowait(void)
          ok(WriteFile(hnp, obuf, 0, &written, NULL), "WriteFile\n");
          ok(written == 0, "write file len\n");
  
@@ -84,7 +84,7 @@ index 29430a0..e8b0067 100644
  
          readden = 0xdeadbeef;
          SetLastError(0xdeadbeef);
-@@ -2791,7 +2811,8 @@ START_TEST(pipe)
+@@ -3051,7 +3071,8 @@ START_TEST(pipe)
      test_CreatePipe();
      test_impersonation();
      test_overlapped();
@@ -95,17 +95,17 @@ index 29430a0..e8b0067 100644
      test_readfileex_pending();
  }
 diff --git a/dlls/ntdll/file.c b/dlls/ntdll/file.c
-index 7c0a2ee..cb75072 100644
+index c22815e..41dc58b 100644
 --- a/dlls/ntdll/file.c
 +++ b/dlls/ntdll/file.c
-@@ -705,6 +705,8 @@ NTSTATUS WINAPI NtReadFile(HANDLE hFile, HANDLE hEvent,
-                 while (result > 0 && !ret);
+@@ -437,6 +437,8 @@ static NTSTATUS read_unix_fd(int fd, char *buf, ULONG *total, ULONG length,
+                 if (ret < 0) ERR("dequeue message failed reason: %s\n", strerror(errno));
              }
          }
-+        else if (message_mode_flags & NAMED_PIPE_NONBLOCKING_MODE)
-+            result = recv( unix_handle, (char *)buffer + total, length - total, MSG_DONTWAIT );
++        else if (pipe_flags & NAMED_PIPE_NONBLOCKING_MODE)
++            result = recv( fd, buf + *total, length - *total, MSG_DONTWAIT );
          else
-             result = read( unix_handle, (char *)buffer + total, length - total );
+             result = read( fd, buf + *total, length - *total );
  
 -- 
 1.7.9.5

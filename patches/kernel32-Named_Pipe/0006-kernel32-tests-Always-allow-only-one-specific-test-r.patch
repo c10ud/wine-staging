@@ -1,4 +1,4 @@
-From f6cade6b3174e694d5032c964130becc17d0cbb9 Mon Sep 17 00:00:00 2001
+From cfea62bb7b34d1e8bcd97ea45497e785e81996a7 Mon Sep 17 00:00:00 2001
 From: Sebastian Lackner <sebastian@fds-team.de>
 Date: Wed, 30 Jul 2014 18:00:19 +0200
 Subject: kernel32/tests: Always allow only one specific test result, add
@@ -8,12 +8,16 @@ The current pipe tests are not really a good base for fixing the implemenation -
 some of the todo_wine's depend on the return value itself. This hides if one of
 the following patches breaks things. Besides that some of the tests are currently
 broken on kernel >= 3.12 (bug #35781), mark those as todo_wine.
+
+Changes in v2:
+  * Ensure that the APC is properly removed - as it turned out this broke like 20 patches
+    later one of the other new tests... ^^
 ---
- dlls/kernel32/tests/pipe.c |   47 +++++++++++---------------------------------
- 1 file changed, 12 insertions(+), 35 deletions(-)
+ dlls/kernel32/tests/pipe.c |   57 +++++++++++++++++---------------------------
+ 1 file changed, 22 insertions(+), 35 deletions(-)
 
 diff --git a/dlls/kernel32/tests/pipe.c b/dlls/kernel32/tests/pipe.c
-index f7c7531..c19456e 100644
+index f7c7531..5790be8 100644
 --- a/dlls/kernel32/tests/pipe.c
 +++ b/dlls/kernel32/tests/pipe.c
 @@ -153,20 +153,13 @@ static void test_CreateNamedPipe(int pipemode)
@@ -97,17 +101,26 @@ index f7c7531..c19456e 100644
              pbuf = ibuf;
              ok(memcmp(obuf, pbuf, sizeof(obuf)) == 0, "content 6a check\n");
              ok(ReadFile(hnp, ibuf, sizeof(ibuf), &readden, NULL), "ReadFile\n");
-@@ -1856,8 +1831,10 @@ static void test_readfileex_pending(void)
+@@ -1856,7 +1831,19 @@ static void test_readfileex_pending(void)
      ok(completion_called == 0, "completion routine called during ReadFile\n");
  
      wait = WaitForSingleObjectEx(event, 0, TRUE);
 +    todo_wine
      ok(wait == WAIT_IO_COMPLETION || wait == WAIT_OBJECT_0, "WaitForSingleObject returned %x\n", wait);
++    if (wait == WAIT_TIMEOUT)
++    {
++        /* work around kernel regression, and read some more */
++        ret = ReadFile(client, read_buf, sizeof(read_buf), &num_bytes, NULL);
++        ok(ret == TRUE, "ReadFile failed\n");
++
++        ok(completion_called == 0, "completion routine called during ReadFile\n");
++
++        wait = WaitForSingleObjectEx(event, 0, TRUE);
++        ok(wait == WAIT_IO_COMPLETION || wait == WAIT_OBJECT_0, "WaitForSingleObject returned %x\n", wait);
++    }
  
-+    todo_wine
      ok(completion_called == 1, "completion routine not called\n");
      ok(completion_errorcode == 0, "completion called with error %x\n", completion_errorcode);
-     ok(completion_lpoverlapped == &overlapped, "completion called with wrong overlapped pointer\n");
 -- 
 1.7.9.5
 

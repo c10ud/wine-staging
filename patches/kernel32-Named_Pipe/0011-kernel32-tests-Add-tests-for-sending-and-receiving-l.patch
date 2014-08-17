@@ -1,4 +1,4 @@
-From a02d97015109e06fee7ae7fdd02a5b2b36ad53bc Mon Sep 17 00:00:00 2001
+From 279e0d9bd0fefd9738814960d3d9af155413da15 Mon Sep 17 00:00:00 2001
 From: Sebastian Lackner <sebastian@fds-team.de>
 Date: Sun, 3 Aug 2014 23:14:35 +0200
 Subject: kernel32/tests: Add tests for sending and receiving large messages.
@@ -7,12 +7,15 @@ This set of tests seems to confirm that on Windows, there is no upper size
 limit where messages are splitted. The kernel seems to temporarily allocate
 additional buffers (or use existing buffers very efficient), so WriteFile()
 can never fail because of size limitations.
+
+Changes in v2:
+  * Avoid compilation warning on x86_64.
 ---
  dlls/kernel32/tests/pipe.c |  124 ++++++++++++++++++++++++++++++++++++++++++++
  1 file changed, 124 insertions(+)
 
 diff --git a/dlls/kernel32/tests/pipe.c b/dlls/kernel32/tests/pipe.c
-index 501ca89..3f0420d 100644
+index cfd167a..2527508 100644
 --- a/dlls/kernel32/tests/pipe.c
 +++ b/dlls/kernel32/tests/pipe.c
 @@ -47,6 +47,7 @@ static void CALLBACK user_apc(ULONG_PTR param)
@@ -24,20 +27,20 @@ index 501ca89..3f0420d 100644
  };
  
 @@ -74,6 +75,14 @@ static DWORD CALLBACK rpcThreadMain(LPVOID arg)
-                                                     (LPOVERLAPPED)rpcargs->args[4] ); /* overlapped */
+                                                         (LPOVERLAPPED)rpcargs->args[4] ); /* overlapped */
              break;
  
 +        case RPC_WRITEFILE:
-+            rpcargs->returnValue = (PVOID)WriteFile( (HANDLE)rpcargs->args[0],        /* hFile */
-+                                                     (LPCVOID)rpcargs->args[1],       /* buffer */
-+                                                     (DWORD)rpcargs->args[2],         /* bytesToWrite */
-+                                                     (LPDWORD)rpcargs->args[3],       /* bytesWritten */
-+                                                     (LPOVERLAPPED)rpcargs->args[4] ); /* overlapped */
++            rpcargs->returnValue = (ULONG_PTR)WriteFile( (HANDLE)rpcargs->args[0],        /* hFile */
++                                                         (LPCVOID)rpcargs->args[1],       /* buffer */
++                                                         (DWORD)rpcargs->args[2],         /* bytesToWrite */
++                                                         (LPDWORD)rpcargs->args[3],       /* bytesWritten */
++                                                         (LPOVERLAPPED)rpcargs->args[4] ); /* overlapped */
 +            break;
 +
          case RPC_PEEKNAMEDPIPE:
-             rpcargs->returnValue = (PVOID)PeekNamedPipe( (HANDLE)rpcargs->args[0],    /* hPipe */
-                                                          (LPVOID)rpcargs->args[1],    /* lpvBuffer */
+             rpcargs->returnValue = (ULONG_PTR)PeekNamedPipe( (HANDLE)rpcargs->args[0],    /* hPipe */
+                                                              (LPVOID)rpcargs->args[1],    /* lpvBuffer */
 @@ -671,6 +680,121 @@ static void test_CreateNamedPipe(int pipemode)
  
          }
@@ -67,14 +70,14 @@ index 501ca89..3f0420d 100644
 +
 +            /* transmit big message, receive with buffer of equal size */
 +            memset(big_ibuf, 0, sizeof(big_ibuf));
-+            rpcargs.returnValue = NULL;
++            rpcargs.returnValue = 0;
 +            rpcargs.lastError = GetLastError();
 +            rpcargs.op = RPC_WRITEFILE;
-+            rpcargs.args[0] = (PVOID)hnp;
-+            rpcargs.args[1] = (PVOID)big_obuf;
-+            rpcargs.args[2] = (PVOID)sizeof(big_obuf);
-+            rpcargs.args[3] = (PVOID)&written;
-+            rpcargs.args[4] = (PVOID)NULL;
++            rpcargs.args[0] = (ULONG_PTR)hnp;
++            rpcargs.args[1] = (ULONG_PTR)big_obuf;
++            rpcargs.args[2] = (ULONG_PTR)sizeof(big_obuf);
++            rpcargs.args[3] = (ULONG_PTR)&written;
++            rpcargs.args[4] = (ULONG_PTR)NULL;
 +
 +            thread = CreateThread(NULL, 0, rpcThreadMain, (void *)&rpcargs, 0, &threadId);
 +            ok(thread != NULL, "CreateThread failed. %d\n", GetLastError());
@@ -105,7 +108,7 @@ index 501ca89..3f0420d 100644
 +
 +            /* same as above, but receive as multiple parts */
 +            memset(big_ibuf, 0, sizeof(big_ibuf));
-+            rpcargs.returnValue = NULL;
++            rpcargs.returnValue = 0;
 +            rpcargs.lastError = GetLastError();
 +
 +            thread = CreateThread(NULL, 0, rpcThreadMain, (void *)&rpcargs, 0, &threadId);
