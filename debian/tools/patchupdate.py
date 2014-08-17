@@ -39,21 +39,21 @@ cached_patch_result = {}
 cached_original_src = {}
 
 class config(object):
-    path_depcache           = "./.depcache"
-    path_srccache           = "./.srccache"
+    path_depcache           = ".depcache"
+    path_srccache           = ".srccache"
 
-    path_patches            = "./patches"
-    path_changelog          = "./debian/changelog"
-    path_wine               = "./debian/tools/wine"
+    path_patches            = "patches"
+    path_changelog          = "debian/changelog"
+    path_wine               = "debian/tools/wine"
 
-    path_template_Makefile  = "./debian/tools/Makefile.in"
-    path_Makefile           = "./patches/Makefile"
+    path_template_Makefile  = "debian/tools/Makefile.in"
+    path_Makefile           = "patches/Makefile"
 
-    path_README_md          = "./README.md"
-    path_template_README_md = "./debian/tools/README.md.in"
+    path_README_md          = "README.md"
+    path_template_README_md = "debian/tools/README.md.in"
 
-    path_DEVELOPER_md       = "./DEVELOPER.md"
-    path_template_DEVELOPER_md = "./debian/tools/DEVELOPER.md.in"
+    path_DEVELOPER_md       = "DEVELOPER.md"
+    path_template_DEVELOPER_md = "debian/tools/DEVELOPER.md.in"
 
 class PatchUpdaterError(RuntimeError):
     """Failed to update patches."""
@@ -118,47 +118,159 @@ def _winebugs_query_short_desc(bugids):
         result[bugid] = element.firstChild.data
     return result
 
-def read_patchsets(directory):
-    """Read information about all patchsets in a given directory."""
+# Read information from changelog
+def _read_changelog():
+    with open(config.path_changelog) as fp:
+        for line in fp:
+            r = re.match("^([a-zA-Z0-9][^(]*)\((.*)\) ([^;]*)", line)
+            if r: yield (r.group(1).strip(), r.group(2).strip(), r.group(3).strip())
 
-    def _iter_kv_from_file(filename):
-        """Iterate through all key/value pairs in a file."""
+# Get version number of the latest stable release
+def _stable_compholio_version():
+    for package, version, distro in _read_changelog():
+        if distro.lower() != "unreleased":
+            return version
+
+# Get latest wine commit
+def _latest_wine_commit():
+    if not os.path.isdir(config.path_wine):
+        raise PatchUpdaterError("Please create a symlink to the wine repository in %s" % config.path_wine)
+    commit = subprocess.check_output(["git", "rev-parse", "origin/master"], cwd=config.path_wine).strip()
+    assert len(commit) == 40
+    return commit
+
+def enum_directories(revision, path):
+    """Enumerate all subdirectories of 'path' at a specific revision."""
+    dirs = []
+
+    if path[0:2] == "./":
+        path = path[2:]
+    elif path[0] == "/":
+        raise RuntimeError("Expected relative path, not an absolute path")
+
+    if revision is None:
+        for name in os.listdir(path):
+            if name in [".", ".."]: continue
+            subdirectory = os.path.join(path, name)
+            if not os.path.isdir(subdirectory):
+                continue
+            dirs.append((name, subdirectory))
+    else:
+        filename = "%s:%s" % (revision, path)
+        try:
+            with open(os.devnull, 'w') as devnull:
+                content = subprocess.check_output(["git", "show", filename], stderr=devnull)
+        except subprocess.CalledProcessError as e:
+            if e.returncode != 128: raise
+            return [] # ignore error
+        lines = content.split("\n")
+        if not lines[0].startswith("tree ") or lines[1] != "":
+            raise RuntimeError("Unexpected output from 'git show %s'" % filename)
+        for name in lines[2:]:
+            if name == "" or name[-1] != "/": continue
+            name = name[:-1]
+            dirs.append((name, os.path.join(path, name)))
+
+    return dirs
+
+def read_definition(revision, filename, name_to_id):
+    """Read a definition file and return information as tuple (authors, depends, fixes)."""
+
+    filename = os.path.join(filename, "definition")
+    if revision is None:
         with open(filename) as fp:
-            for line in fp:
-                if line.startswith("#"):
-                    continue
-                tmp = line.split(":", 1)
-                if len(tmp) != 2:
-                    yield None, None
-                else:
-                    yield tmp[0].lower(), tmp[1].strip()
+            content = fp.read()
+    else:
+        filename = "%s:%s" % (revision, filename)
+        try:
+            with open(os.devnull, 'w') as devnull:
+                content = subprocess.check_output(["git", "show", filename], stderr=devnull)
+        except CalledProcessError:
+            raise IOError("Failed to load %s" % filename)
+
+    authors = []
+    depends = set()
+    fixes   = []
+    info    = AuthorInfo()
+
+    for line in content.split("\n"):
+        if line.startswith("#"):
+            continue
+
+        tmp = line.split(":", 1)
+        if len(tmp) != 2:
+            if len(info.author) and len(info.subject):
+                authors.append(info)
+                info = AuthorInfo()
+            continue
+
+        key, val = tmp[0].lower(), tmp[1].strip()
+        if key == "author":
+            if len(info.author): info.author += ", "
+            info.author += val
+
+        elif key == "subject" or key == "title":
+            if len(info.subject): info.subject += " "
+            info.subject += val
+
+        elif key == "revision":
+            if len(info.revision): info.revision += ", "
+            info.revision += val
+
+        elif key == "depends":
+            if name_to_id is not None:
+                if not name_to_id.has_key(val):
+                    raise PatchUpdaterError("Definition file %s references unknown dependency %s" % (filename, val))
+                depends.add(name_to_id[val])
+
+        elif key == "fixes":
+            r = re.match("^[0-9]+$", val)
+            if r:
+                fixes.append((int(val), None))
+                continue
+            r = re.match("^\\[ *([0-9]+) *\\](.*)$", val)
+            if r:
+                fixes.append((int(r.group(1)), r.group(2).strip()))
+                continue
+            fixes.append((None, val))
+
+        else:
+            print "WARNING: Ignoring unknown command in definition file %s: %s" % (deffile, line)
+
+    if len(info.author) and len(info.subject):
+        authors.append(info)
+    return authors, depends, fixes
+
+def read_patchset(revision = None):
+    """Read information about all patchsets for a specific revision."""
 
     unique_id   = itertools.count()
     all_patches = {}
     name_to_id  = {}
-    all_bugs    = []
 
     # Read in sorted order (to ensure created Makefile doesn't change too much)
-    for name in sorted(os.listdir(directory)):
-        if name in [".", ".."]: continue
-        subdirectory = os.path.join(directory, name)
-        if not os.path.isdir(subdirectory): continue
-
+    for name, subdirectory in sorted(enum_directories(revision, config.path_patches)):
         patch = PatchSet(name)
 
-        # Enumerate .patch files in the given directory, enumerate individual patches and affected files
-        for f in sorted(os.listdir(subdirectory)):
-            if not f.endswith(".patch") or not os.path.isfile(os.path.join(subdirectory, f)):
-                continue
-            patch.files.append(f)
-            for p in patchutils.read_patch(os.path.join(subdirectory, f)):
-                patch.patches.append(p)
-                patch.modified_files.add(p.modified_file)
+        if revision is None:
 
-        # No single patch within this directory, ignore it
-        if len(patch.patches) == 0:
-            del patch
-            continue
+            # If its the latest revision, then request additional information
+            if not os.path.isdir(subdirectory):
+                raise RuntimeError("Unable to open directory %s" % subdirectory)
+
+            # Enumerate .patch files in the given directory, enumerate individual patches and affected files
+            for f in sorted(os.listdir(subdirectory)):
+                if not f.endswith(".patch") or not os.path.isfile(os.path.join(subdirectory, f)):
+                    continue
+                patch.files.append(f)
+                for p in patchutils.read_patch(os.path.join(subdirectory, f)):
+                    patch.modified_files.add(p.modified_file)
+                    patch.patches.append(p)
+
+            # No single patch within this directory, ignore it
+            if len(patch.patches) == 0:
+                del patch
+                continue
 
         i = next(unique_id)
         all_patches[i]   = patch
@@ -166,64 +278,11 @@ def read_patchsets(directory):
 
     # Now read the definition files in a second step
     for i, patch in all_patches.iteritems():
-        deffile = os.path.join(os.path.join(directory, patch.name), "definition")
-
-        if not os.path.isfile(deffile):
-            raise PatchUpdaterError("Missing definition file %s" % deffile)
-
-        info = AuthorInfo()
-
-        for key, val in _iter_kv_from_file(deffile):
-            if key is None:
-                if len(info.author) and len(info.subject) and len(info.revision):
-                    patch.authors.append(info)
-                    info = AuthorInfo()
-                continue
-
-            if key == "author":
-                if len(info.author): info.author += ", "
-                info.author += val
-
-            elif key == "subject" or key == "title":
-                if len(info.subject): info.subject += " "
-                info.subject += val
-
-            elif key == "revision":
-                if len(info.revision): info.revision += ", "
-                info.revision += val
-
-            elif key == "fixes":
-                r = re.match("^[0-9]+$", val)
-                if r:
-                    bugid = int(val)
-                    patch.fixes.append((bugid, None, None))
-                    all_bugs.append(bugid)
-                    continue
-
-                r = re.match("^\\[ *([0-9]+) *\\](.*)$", val)
-                if r:
-                    bugid, description = int(r.group(1)), r.group(2).strip()
-                    patch.fixes.append((bugid, None, description))   
-                    all_bugs.append(bugid)
-                    continue
-
-                patch.fixes.append((None, None, val))
-
-            elif key == "depends":
-                if not name_to_id.has_key(val):
-                    raise PatchUpdaterError("Definition file %s references unknown dependency %s" % (deffile, val))
-                patch.depends.add(name_to_id[val])
-
-            else:
-                print "WARNING: Ignoring unknown command in definition file %s: %s" % (deffile, line)
-
-        if len(info.author) and len(info.subject) and len(info.revision):
-            patch.authors.append(info)
-
-    bug_short_desc = _winebugs_query_short_desc(all_bugs)
-    for i, patch in all_patches.iteritems():
-        patch.fixes = [(bugid, (bug_short_desc[bugid] if bug_short_desc.has_key(bugid) else None),
-                       description) for bugid, dummy, description in patch.fixes]
+        try:
+            patch.authors, patch.depends, patch.fixes = \
+                read_definition(revision, os.path.join(config.path_patches, patch.name), name_to_id)
+        except IOError:
+            raise PatchUpaterError("Missing definition file for %s" % patch.name)
 
     return all_patches
 
@@ -281,7 +340,7 @@ def get_wine_file(filename, force=False):
         with open(os.devnull, 'w') as devnull:
             content = subprocess.check_output(["git", "show", entry], cwd=config.path_wine, stderr=devnull)
     except subprocess.CalledProcessError as e:
-        if e.returncode != 128: raise # not found
+        if e.returncode != 128: raise
         content = ""
 
     content_hash = hashlib.sha256(content).digest()
@@ -412,135 +471,155 @@ def verify_dependencies(all_patches):
     finally:
         _save_patch_cache()
 
-def generate_makefile(all_patches, fp):
+def generate_makefile(all_patches):
     """Generate Makefile for a specific set of patches."""
 
     with open(config.path_template_Makefile) as template_fp:
         template = template_fp.read()
-    fp.write(template.format(patchlist="\t" + " \\\n\t".join(["%s.ok" % patch.name for i, patch in all_patches.iteritems()])))
 
-    for i, patch in all_patches.iteritems():
-        fp.write("# Patchset %s\n" % patch.name)
-        fp.write("# |\n")
-        fp.write("# | Included patches:\n")
+    with open(config.path_Makefile, "w") as fp:
+        fp.write(template.format(patchlist="\t" + " \\\n\t".join(["%s.ok" % patch.name for i, patch in all_patches.iteritems()])))
 
-        # List all patches and their corresponding authors
-        for info in patch.authors:
-            if not info.subject: continue
-            s = []
-            if info.revision and info.revision != "1": s.append("rev %s" % info.revision)
-            if info.author: s.append("by %s" % info.author)
-            if len(s): s = " [%s]" % ", ".join(s)
-            fp.write("# |   *\t%s\n" % "\n# | \t".join(textwrap.wrap(info.subject + s, 120)))
-        fp.write("# |\n")
-
-        # List all bugs fixed by this patchset
-        if any([bugid is not None for bugid, bugname, description in patch.fixes]):
-            fp.write("# | This patchset fixes the following Wine bugs:\n")
-            for bugid, bugname, description in patch.fixes:
-                if bugid is not None:
-                    fp.write("# |   *\t%s\n" % "\n# | \t".join(textwrap.wrap("[#%d] %s" % (bugid, bugname), 120)))
+        for i, patch in all_patches.iteritems():
+            fp.write("# Patchset %s\n" % patch.name)
             fp.write("# |\n")
+            fp.write("# | Included patches:\n")
 
-        # List all modified files
-        fp.write("# | Modified files: \n")
-        fp.write("# |   *\t%s\n" % "\n# | \t".join(textwrap.wrap(", ".join(sorted(patch.modified_files)), 120)))
-        fp.write("# |\n")
-
-        # Generate dependencies and code to apply patches
-        fp.write(".INTERMEDIATE: %s.ok\n" % patch.name)
-        depends = " ".join([""] + ["%s.ok" % all_patches[d].name for d in patch.depends]) if len(patch.depends) else ""
-        fp.write("%s.ok:%s\n" % (patch.name, depends))
-        for f in patch.files:
-            fp.write("\t$(call APPLY_FILE,%s)\n" % os.path.join(patch.name, f))
-
-        # Create *.ok file (used to generate patchlist)
-        if len(patch.authors):
-            fp.write("\t@( \\\n")
+            # List all patches and their corresponding authors
             for info in patch.authors:
                 if not info.subject: continue
-                s = info.subject.replace("\\", "\\\\\\\\").replace("\"", "\\\\\"")
-                if info.revision and info.revision != "1": s += " [rev %s]" % info.revision
-                fp.write("\t\techo '+    { \"%s\", \"%s\", \"%s\" },'; \\\n" % (patch.name, info.author, s))
-            fp.write("\t) > %s.ok\n" % patch.name)
-        else:
-            fp.write("\ttouch %s.ok\n" % patch.name)
-        fp.write("\n");
+                s = []
+                if info.revision and info.revision != "1": s.append("rev %s" % info.revision)
+                if info.author: s.append("by %s" % info.author)
+                if len(s): s = " [%s]" % ", ".join(s)
+                fp.write("# |   *\t%s\n" % "\n# | \t".join(textwrap.wrap(info.subject + s, 120)))
+            fp.write("# |\n")
 
-def generate_readme_md(all_patches, fp):
-    """Generate README.md including information about specific patches and bugfixes."""
+            # List all bugs fixed by this patchset
+            if any([bugid is not None for bugid, bugname in patch.fixes]):
+                fp.write("# | This patchset fixes the following Wine bugs:\n")
+                for bugid, bugname in patch.fixes:
+                    if bugid is not None:
+                        fp.write("# |   *\t%s\n" % "\n# | \t".join(textwrap.wrap("[#%d] %s" % (bugid, bugname), 120)))
+                fp.write("# |\n")
 
-    # Get list of all bugs
-    def _all_bugs():
-        all_bugs = []
-        for i, patch in all_patches.iteritems():
-            for (bugid, bugname, description) in patch.fixes:
-                if bugid is not None:
-                    if description is None: description = bugname
-                    all_bugs.append((bugid, bugname, description))
-        for (bugid, bugname, description) in sorted(all_bugs, key=lambda x: x[2]):
-            yield "%s ([Wine Bug #%d](http://bugs.winehq.org/show_bug.cgi?id=%d \"%s\"))" % \
-                  (description, bugid, bugid, bugname.replace("\\", "\\\\").replace("\"", "\\\""))
+            # List all modified files
+            fp.write("# | Modified files: \n")
+            fp.write("# |   *\t%s\n" % "\n# | \t".join(textwrap.wrap(", ".join(sorted(patch.modified_files)), 120)))
+            fp.write("# |\n")
 
-    # Get list of all fixes
-    def _all_fixes():
-        all_fixes = []
-        for i, patch in all_patches.iteritems():
-            for (bugid, bugname, description) in patch.fixes:
-                if bugid is None: all_fixes.append(description)
-        for description in sorted(all_fixes):
-            yield description
+            # Generate dependencies and code to apply patches
+            fp.write(".INTERMEDIATE: %s.ok\n" % patch.name)
+            depends = " ".join([""] + ["%s.ok" % all_patches[d].name for d in patch.depends]) if len(patch.depends) else ""
+            fp.write("%s.ok:%s\n" % (patch.name, depends))
+            for f in patch.files:
+                fp.write("\t$(call APPLY_FILE,%s)\n" % os.path.join(patch.name, f))
 
-    # Create enumeration from list
-    def _enum(x):
-        return "* " + "\n* ".join(x)
+            # Create *.ok file (used to generate patchlist)
+            if len(patch.authors):
+                fp.write("\t@( \\\n")
+                for info in patch.authors:
+                    if not info.subject: continue
+                    s = info.subject.replace("\\", "\\\\\\\\").replace("\"", "\\\\\"")
+                    if info.revision and info.revision != "1": s += " [rev %s]" % info.revision
+                    fp.write("\t\techo '+    { \"%s\", \"%s\", \"%s\" },'; \\\n" % (patch.name, info.author, s))
+                fp.write("\t) > %s.ok\n" % patch.name)
+            else:
+                fp.write("\ttouch %s.ok\n" % patch.name)
+            fp.write("\n");
 
+def generate_markdown(all_patches, stable_patches, stable_compholio_version):
+    """Generate README.md and DEVELOPER.md including information about specific patches and bugfixes."""
+
+    def _format_bug(mode, bugid, bugname):
+        if bugid is not None:
+            short_desc = bug_short_desc[bugid]
+            if bugname is None: bugname = short_desc
+        if mode < 0: bugname = "~~%s~~" % bugname
+        if bugid is None: return "* %s" % bugname
+        return "* %s ([Wine Bug #%d](http://bugs.winehq.org/show_bug.cgi?id=%d \"%s\"))" % \
+               (bugname, bugid, bugid, short_desc.replace("\\", "\\\\").replace("\"", "\\\""))
+
+    all_bugids = set()
+    all_fixes  = {}
+
+    # Get fixes for current version
+    for i, patch in all_patches.iteritems():
+        for bugid, bugname in patch.fixes:
+            if bugid is not None: all_bugids.add(bugid)
+            key = bugid if bugid is not None else bugname
+            all_fixes[key] = [1, bugid, bugname]
+
+    # Compare with fixes for latest stable version
+    for i, patch in stable_patches.iteritems():
+        for bugid, bugname in patch.fixes:
+            if bugid is not None: all_bugids.add(bugid)
+            key = bugid if bugid is not None else bugname
+            if all_fixes.has_key(key):
+                all_fixes[key][0] = 0
+            else:
+                all_fixes[key] = [-1, bugid, bugname]
+
+    # Generate lists for all new and old fixes
+    new_fixes = [(mode, bugid, bugname) for dummy, (mode, bugid, bugname) in
+                                            all_fixes.iteritems() if mode > 0]
+    old_fixes = [(mode, bugid, bugname) for dummy, (mode, bugid, bugname) in
+                                            all_fixes.iteritems() if mode <= 0]
+
+    # List of old fixes is not available when releasing a new version
+    if len(old_fixes) == 0:
+        old_fixes = new_fixes
+        new_fixes = []
+
+    # Query information from bugzilla
+    bug_short_desc = _winebugs_query_short_desc(all_bugids)
+
+    # Generate information for current version
+    lines = []
+    if len(new_fixes):
+        lines.append("**Bugfixes and features included in the next upcoming release [%d]:**" % len(new_fixes))
+        lines.append("")
+        for mode, bugid, bugname in sorted(new_fixes, key=lambda x: x[2]):
+            lines.append(_format_bug(mode, bugid, bugname))
+        lines.append("")
+        lines.append("")
+    lines.append("**Bugs fixed in Wine-Compholio %s [%d]:**" % (stable_compholio_version, len(old_fixes)))
+    lines.append("")
+    for mode, bugid, bugname in sorted(old_fixes, key=lambda x: x[2]):
+        lines.append(_format_bug(mode, bugid, bugname))
+
+    # Update README.md
     with open(config.path_template_README_md) as template_fp:
         template = template_fp.read()
-    fp.write(template.format(bugs=_enum(_all_bugs()), fixes=_enum(_all_fixes())))
+    with open(config.path_README_md, "w") as fp:
+        fp.write(template.format(fixes="\n".join(lines)))
 
-def generate_developer_md(fp):
-
-    # Read information from changelog
-    def _read_changelog():
-        with open(config.path_changelog) as fp:
-            for line in fp:
-                r = re.match("^([a-zA-Z0-9][^(]*)\((.*)\) ([^;]*)", line)
-                if r: yield (r.group(1).strip(), r.group(2).strip(), r.group(3).strip())
-
-    # Get version number of the latest stable release
-    def _latest_stable_version():
-        for package, version, distro in _read_changelog():
-            if distro.lower() != "unreleased":
-                return version
-
+    # Update DEVELOPER.md
     with open(config.path_template_DEVELOPER_md) as template_fp:
         template = template_fp.read()
-    fp.write(template.format(version=_latest_stable_version()))
-
+    with open(config.path_DEVELOPER_md, "w") as fp:
+        fp.write(template.format(version=stable_compholio_version))
 
 if __name__ == "__main__":
-
-    # Get the latest wine commit (sha1)
-    if not os.path.isdir(config.path_wine):
-        raise RuntimeError("Please create a symlink to the wine repository in %s" % config.path_wine)
-    latest_wine_commit = subprocess.check_output(["git", "rev-parse", "origin/master"], cwd=config.path_wine).strip()
-    assert len(latest_wine_commit) == 40
-
     try:
-        all_patches = read_patchsets(config.path_patches)
+
+        # Get information about Wine and Compholio version
+        latest_wine_commit       = _latest_wine_commit()
+        stable_compholio_version = _stable_compholio_version()
+
+        # Read current and stable patches
+        all_patches    = read_patchset()
+        stable_patches = read_patchset(revision="v%s" % stable_compholio_version)
+
+        # Check dependencies
         verify_dependencies(all_patches)
+
+        # Update Makefile, README.md and DEVELOPER.md
+        generate_makefile(all_patches)
+        generate_markdown(all_patches, stable_patches, stable_compholio_version)
+
     except PatchUpdaterError as e:
         print ""
         print "ERROR: %s" % e
         print ""
         exit(1)
-
-    with open(config.path_Makefile, "w") as fp:
-        generate_makefile(all_patches, fp)
-
-    with open(config.path_README_md, "w") as fp:
-        generate_readme_md(all_patches, fp)
-
-    with open(config.path_DEVELOPER_md, "w") as fp:
-        generate_developer_md(fp)
