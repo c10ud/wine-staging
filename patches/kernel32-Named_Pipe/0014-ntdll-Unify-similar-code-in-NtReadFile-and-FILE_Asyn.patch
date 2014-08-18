@@ -1,4 +1,4 @@
-From a0711ad5e155c279b3a13f0c88de5a60391a0df7 Mon Sep 17 00:00:00 2001
+From 477329a6967a0a35063671c260f90c76876aab52 Mon Sep 17 00:00:00 2001
 From: Sebastian Lackner <sebastian@fds-team.de>
 Date: Fri, 15 Aug 2014 22:23:08 +0200
 Subject: ntdll: Unify similar code in NtReadFile and FILE_AsyncReadService.

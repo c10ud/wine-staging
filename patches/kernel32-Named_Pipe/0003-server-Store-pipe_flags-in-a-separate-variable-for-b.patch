@@ -1,4 +1,4 @@
-From 595792bb8081cfe93de68a2fe298f1bb73268ec3 Mon Sep 17 00:00:00 2001
+From 0826b4c53e337639519e8aabe7a6a57f67d6dd0c Mon Sep 17 00:00:00 2001
 From: Sebastian Lackner <sebastian@fds-team.de>
 Date: Tue, 12 Aug 2014 21:29:59 +0200
 Subject: server: Store pipe_flags in a separate variable for both server and

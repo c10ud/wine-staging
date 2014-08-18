@@ -1,4 +1,4 @@
-From 62ef170629098ac4be0b39b1a8938350735cb04a Mon Sep 17 00:00:00 2001
+From 3c933f166c1b73377107178b33354e92bb987ece Mon Sep 17 00:00:00 2001
 From: Sebastian Lackner <sebastian@fds-team.de>
 Date: Sun, 17 Aug 2014 01:29:06 +0200
 Subject: ntdll: Add support for nonblocking pipes.
@@ -8,7 +8,7 @@ Subject: ntdll: Add support for nonblocking pipes.
  1 file changed, 13 insertions(+), 2 deletions(-)
 
 diff --git a/dlls/ntdll/file.c b/dlls/ntdll/file.c
-index 2152c8a..c22815e 100644
+index a79e8f3..c6f09d4 100644
 --- a/dlls/ntdll/file.c
 +++ b/dlls/ntdll/file.c
 @@ -414,6 +414,10 @@ static NTSTATUS read_unix_fd(int fd, char *buf, ULONG *total, ULONG length,

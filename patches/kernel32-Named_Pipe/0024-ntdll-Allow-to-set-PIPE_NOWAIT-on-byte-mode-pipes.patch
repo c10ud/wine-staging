@@ -1,7 +1,7 @@
-From 13e27e178b7866439acb3264f3e9915dd48dbac2 Mon Sep 17 00:00:00 2001
+From 97d08343b099d5d4fc7935f918d0b2a25da7b4c8 Mon Sep 17 00:00:00 2001
 From: Sebastian Lackner <sebastian@fds-team.de>
 Date: Mon, 11 Aug 2014 05:34:19 +0200
-Subject: kernel32: Allow to set PIPE_NOWAIT on byte-mode pipes.
+Subject: ntdll: Allow to set PIPE_NOWAIT on byte-mode pipes.
 
 This patch implements the functionality to set PIPE_NOWAIT on regular bytemode
 pipes. This patch also extends the test to show that the implemented behaviour
@@ -12,7 +12,7 @@ matches the native implementation.
  2 files changed, 31 insertions(+), 8 deletions(-)
 
 diff --git a/dlls/kernel32/tests/pipe.c b/dlls/kernel32/tests/pipe.c
-index a63ba32..334e867 100644
+index 0ddfe06..5064857 100644
 --- a/dlls/kernel32/tests/pipe.c
 +++ b/dlls/kernel32/tests/pipe.c
 @@ -2527,7 +2527,7 @@ static void test_overlapped(void)
@@ -95,7 +95,7 @@ index a63ba32..334e867 100644
      test_readfileex_pending();
  }
 diff --git a/dlls/ntdll/file.c b/dlls/ntdll/file.c
-index c22815e..41dc58b 100644
+index c6f09d4..1476377 100644
 --- a/dlls/ntdll/file.c
 +++ b/dlls/ntdll/file.c
 @@ -437,6 +437,8 @@ static NTSTATUS read_unix_fd(int fd, char *buf, ULONG *total, ULONG length,

@@ -1,4 +1,4 @@
-From dc2f8cc45e6841005061d463dff84d8560c5a83c Mon Sep 17 00:00:00 2001
+From d376d6507ecf0fb7f40e09fe09b34cf76ba908b3 Mon Sep 17 00:00:00 2001
 From: Sebastian Lackner <sebastian@fds-team.de>
 Date: Sun, 17 Aug 2014 01:13:44 +0200
 Subject: ntdll: Fix some tests for overlapped partial reads.
@@ -38,7 +38,7 @@ index 412659b..3240911 100644
          SetLastError( RtlNtStatusToDosError(status) );
          return FALSE;
 diff --git a/dlls/kernel32/tests/pipe.c b/dlls/kernel32/tests/pipe.c
-index 8e2cbd4..215ea67 100644
+index 136fc73..8cfde06 100644
 --- a/dlls/kernel32/tests/pipe.c
 +++ b/dlls/kernel32/tests/pipe.c
 @@ -2493,7 +2493,6 @@ todo_wine
@@ -66,7 +66,7 @@ index 8e2cbd4..215ea67 100644
      ok(completion_num_bytes == 4, "ReadFileEx returned only %d bytes\n", completion_num_bytes);
      ok(completion_lpoverlapped == &overlapped, "completion called with wrong overlapped pointer\n");
 diff --git a/dlls/ntdll/file.c b/dlls/ntdll/file.c
-index 16d7b45..b95994d 100644
+index df68090..a79e8f3 100644
 --- a/dlls/ntdll/file.c
 +++ b/dlls/ntdll/file.c
 @@ -827,8 +827,8 @@ err:

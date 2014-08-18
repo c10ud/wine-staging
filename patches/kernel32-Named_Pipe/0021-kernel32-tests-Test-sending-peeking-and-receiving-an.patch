@@ -1,4 +1,4 @@
-From 96a9fc1a46933e09261382fd7fec43b2017c75b1 Mon Sep 17 00:00:00 2001
+From 2a7e71eccccb74c6005d528888b4c5594c632713 Mon Sep 17 00:00:00 2001
 From: Sebastian Lackner <sebastian@fds-team.de>
 Date: Mon, 11 Aug 2014 00:56:46 +0200
 Subject: kernel32/tests: Test sending, peeking and receiving an empty
@@ -10,11 +10,10 @@ Changes in v2:
   * Fix issue in broken pipe check, should be moved into an earlier patch.
 ---
  dlls/kernel32/tests/pipe.c |  336 ++++++++++++++++++++++++++++++++++++++++++++
- dlls/ntdll/file.c          |    2 +-
- 2 files changed, 337 insertions(+), 1 deletion(-)
+ 1 file changed, 336 insertions(+)
 
 diff --git a/dlls/kernel32/tests/pipe.c b/dlls/kernel32/tests/pipe.c
-index 215ea67..a250f94 100644
+index 8cfde06..c2bca8c 100644
 --- a/dlls/kernel32/tests/pipe.c
 +++ b/dlls/kernel32/tests/pipe.c
 @@ -337,6 +337,146 @@ static void test_CreateNamedPipe(int pipemode)
@@ -381,19 +380,6 @@ index 215ea67..a250f94 100644
  }
  
  /** implementation of alarm() */
-diff --git a/dlls/ntdll/file.c b/dlls/ntdll/file.c
-index b95994d..2152c8a 100644
---- a/dlls/ntdll/file.c
-+++ b/dlls/ntdll/file.c
-@@ -455,7 +455,7 @@ static NTSTATUS read_unix_fd(int fd, char *buf, ULONG *total, ULONG length,
-                 case FD_TYPE_PIPE:
-                     {
-                         NTSTATUS status = unix_fd_avail( fd, &result );
--                        if (!status && !result) status = STATUS_PENDING;
-+                        if (!status && !result && !length) status = STATUS_PENDING;
-                         return status;
-                     }
-                 default:
 -- 
 1.7.9.5
 

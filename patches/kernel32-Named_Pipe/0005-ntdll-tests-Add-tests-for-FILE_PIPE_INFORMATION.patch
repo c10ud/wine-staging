@@ -1,4 +1,4 @@
-From 77c7d23436814c1798815d1f963d18a9cf5ad1fc Mon Sep 17 00:00:00 2001
+From f78c4bb06e2c463ea2e7a7cee374714814a5fdb1 Mon Sep 17 00:00:00 2001
 From: Sebastian Lackner <sebastian@fds-team.de>
 Date: Tue, 12 Aug 2014 21:31:00 +0200
 Subject: ntdll/tests: Add tests for FILE_PIPE_INFORMATION.

@@ -1,4 +1,4 @@
-From a55583195f9aa69ae997f375da22d483fbf12c82 Mon Sep 17 00:00:00 2001
+From cf370c3fae81841e2b2984ddc3ea313607a3a824 Mon Sep 17 00:00:00 2001
 From: Sebastian Lackner <sebastian@fds-team.de>
 Date: Tue, 12 Aug 2014 21:30:34 +0200
 Subject: server: Implement set_named_pipe_info wineserver call for

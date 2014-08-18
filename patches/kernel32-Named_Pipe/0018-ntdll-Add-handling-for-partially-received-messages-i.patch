@@ -1,4 +1,4 @@
-From 97c03c03534f16975040262d9212af6a7aa67e45 Mon Sep 17 00:00:00 2001
+From d9ec165c433a933d7881cc6a4e1d5867893e8001 Mon Sep 17 00:00:00 2001
 From: Sebastian Lackner <sebastian@fds-team.de>
 Date: Mon, 11 Aug 2014 18:20:52 +0200
 Subject: ntdll: Add handling for partially received messages in NtReadFile.
@@ -9,6 +9,9 @@ Changes in v2:
 
 Changes in v3:
   * Rebased. Simplified check for broken pipe.
+
+Changes in v4:
+  * Include changes from later patch.
 ---
  dlls/kernel32/tests/pipe.c |   53 +++++---------------------------------------
  dlls/ntdll/file.c          |   23 ++++++++++++++-----
@@ -241,7 +244,7 @@ index 3b04e66..c1d406d 100644
      ok(overlapped.InternalHigh == 0, "expected 0, got %lu\n", overlapped.InternalHigh);
  
 diff --git a/dlls/ntdll/file.c b/dlls/ntdll/file.c
-index 50b6d6f..16d7b45 100644
+index 89897cd..df68090 100644
 --- a/dlls/ntdll/file.c
 +++ b/dlls/ntdll/file.c
 @@ -370,7 +370,7 @@ NTSTATUS FILE_GetNtStatus(void)
@@ -287,7 +290,7 @@ index 50b6d6f..16d7b45 100644
 +                case FD_TYPE_PIPE:
 +                    {
 +                        NTSTATUS status = unix_fd_avail( fd, &result );
-+                        if (!status && !result) status = STATUS_PENDING;
++                        if (!status && !result && !length) status = STATUS_PENDING;
 +                        return status;
 +                    }
                  default:

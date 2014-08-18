@@ -1,4 +1,4 @@
-From a7ef7f6e62827af5efe4ae0f11f9bddc1cec212b Mon Sep 17 00:00:00 2001
+From 68eb737ebb05ea27d51588c2f5c8fa5d6dce7cff Mon Sep 17 00:00:00 2001
 From: Dan Kegel <dank@kegel.com>
 Date: Sat, 26 Jul 2014 14:07:55 -0600
 Subject: kernel32: ConnectNamedPort should return FALSE and set

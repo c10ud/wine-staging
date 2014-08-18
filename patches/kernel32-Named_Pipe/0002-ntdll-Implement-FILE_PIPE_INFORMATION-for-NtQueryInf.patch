@@ -1,4 +1,4 @@
-From d0ce619b7bb438f99fd15076ae4b32198bfde2b7 Mon Sep 17 00:00:00 2001
+From a621406ad321dc6871fbaf7c43d70fa6da9df07a Mon Sep 17 00:00:00 2001
 From: Adam Martinson <adam.r.martinson@gmail.com>
 Date: Tue, 12 Aug 2014 21:29:47 +0200
 Subject: ntdll: Implement FILE_PIPE_INFORMATION for NtQueryInformationFile.

@@ -1,4 +1,4 @@
-From d830fdab7c7b3442227a9d1fdb0f0078a2dec5c3 Mon Sep 17 00:00:00 2001
+From dc1ca4b02cd4fd99e2448515f3aa73f43a8a1374 Mon Sep 17 00:00:00 2001
 From: Sebastian Lackner <sebastian@fds-team.de>
 Date: Sun, 17 Aug 2014 02:56:57 +0200
 Subject: kernel32/tests: Add additional tests for PIPE_NOWAIT in overlapped
@@ -9,7 +9,7 @@ Subject: kernel32/tests: Add additional tests for PIPE_NOWAIT in overlapped
  1 file changed, 294 insertions(+), 1 deletion(-)
 
 diff --git a/dlls/kernel32/tests/pipe.c b/dlls/kernel32/tests/pipe.c
-index 334e867..2b80fa8 100644
+index 5064857..a070040 100644
 --- a/dlls/kernel32/tests/pipe.c
 +++ b/dlls/kernel32/tests/pipe.c
 @@ -2747,7 +2747,7 @@ static void test_readfileex_pending(void)

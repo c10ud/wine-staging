@@ -1,4 +1,4 @@
-From cfea62bb7b34d1e8bcd97ea45497e785e81996a7 Mon Sep 17 00:00:00 2001
+From 2ae3b0fe9a03067879de3c7409e212510e134900 Mon Sep 17 00:00:00 2001
 From: Sebastian Lackner <sebastian@fds-team.de>
 Date: Wed, 30 Jul 2014 18:00:19 +0200
 Subject: kernel32/tests: Always allow only one specific test result, add

@@ -1,4 +1,4 @@
-From 4eedaad8f78e784d1e6bdca9234950f58ad88d15 Mon Sep 17 00:00:00 2001
+From 99ab53d515835e96f3beb9ee988008e969ebc03c Mon Sep 17 00:00:00 2001
 From: Sebastian Lackner <sebastian@fds-team.de>
 Date: Sun, 17 Aug 2014 00:47:26 +0200
 Subject: kernel32/tests: Add more tests with overlapped IO and partial reads
@@ -9,7 +9,7 @@ Subject: kernel32/tests: Add more tests with overlapped IO and partial reads
  1 file changed, 150 insertions(+)
 
 diff --git a/dlls/kernel32/tests/pipe.c b/dlls/kernel32/tests/pipe.c
-index c1d406d..8e2cbd4 100644
+index c1d406d..136fc73 100644
 --- a/dlls/kernel32/tests/pipe.c
 +++ b/dlls/kernel32/tests/pipe.c
 @@ -2300,6 +2300,7 @@ static void test_readfileex_pending(void)
@@ -59,7 +59,7 @@ index c1d406d..8e2cbd4 100644
 +    ok(ret == TRUE, "ReadFileEx failed, err=%i\n", GetLastError());
 +    ok(completion_called == 0, "completion routine called before ReadFileEx returned\n");
 +    wait = WaitForSingleObject(event, 100);
-+    ok(wait == WAIT_TIMEOUT, "WaitForSingleObjectEx returned %x\n", wait);
++    ok(wait == WAIT_TIMEOUT, "WaitForSingleObject returned %x\n", wait);
 +    ok(completion_called == 0, "completion routine called before WriteFile started\n");
 +
 +    ret = WriteFile(client, long_test_string, strlen(long_test_string), &num_bytes, NULL);
@@ -167,7 +167,7 @@ index c1d406d..8e2cbd4 100644
 +    todo_wine
 +    ok(num_bytes == 0, "ReadFile returned %d bytes\n", num_bytes);
 +    wait = WaitForSingleObjectEx(event, 0, TRUE);
-+    ok(wait == WAIT_OBJECT_0, "WaitForSingleObject returned %x\n", wait);
++    ok(wait == WAIT_OBJECT_0, "WaitForSingleObjectEx returned %x\n", wait);
 +    todo_wine
 +    ok(num_bytes == 0, "bytes %u\n", num_bytes);
 +    ok((NTSTATUS)overlapped.Internal == STATUS_BUFFER_OVERFLOW, "expected STATUS_BUFFER_OVERFLOW, got %#lx\n", overlapped.Internal);

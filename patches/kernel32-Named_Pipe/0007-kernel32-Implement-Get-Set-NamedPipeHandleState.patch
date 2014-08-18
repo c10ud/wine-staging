@@ -1,4 +1,4 @@
-From 5f30a55ce7b884a283be7a9566641de180a8682c Mon Sep 17 00:00:00 2001
+From 5b33f8fd992f8944442e8428e433461157b9e6c9 Mon Sep 17 00:00:00 2001
 From: Sebastian Lackner <sebastian@fds-team.de>
 Date: Mon, 11 Aug 2014 17:26:18 +0200
 Subject: kernel32: Implement {Get,Set}NamedPipeHandleState.
