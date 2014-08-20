@@ -320,35 +320,32 @@ kernel32-GetVolumePathName.ok:
 # |
 # | Modified files: 
 # |   *	dlls/kernel32/file.c, dlls/kernel32/sync.c, dlls/kernel32/tests/pipe.c, dlls/ntdll/file.c, dlls/ntdll/tests/pipe.c,
-# | 	include/winternl.h, server/named_pipe.c, server/protocol.def, server/sock.c, server/sock.h
+# | 	server/named_pipe.c, server/protocol.def, server/sock.c, server/sock.h
 # |
 .INTERMEDIATE: kernel32-Named_Pipe.ok
 kernel32-Named_Pipe.ok: server-Address_Change_Notification.ok ws2_32-Connect_Time.ok ws2_32-TransmitFile.ok
 	$(call APPLY_FILE,kernel32-Named_Pipe/0001-kernel32-ConnectNamedPort-should-return-FALSE-and-se.patch)
-	$(call APPLY_FILE,kernel32-Named_Pipe/0002-ntdll-Implement-FILE_PIPE_INFORMATION-for-NtQueryInf.patch)
-	$(call APPLY_FILE,kernel32-Named_Pipe/0003-server-Store-pipe_flags-in-a-separate-variable-for-b.patch)
-	$(call APPLY_FILE,kernel32-Named_Pipe/0004-server-Implement-set_named_pipe_info-wineserver-call.patch)
-	$(call APPLY_FILE,kernel32-Named_Pipe/0005-ntdll-tests-Add-tests-for-FILE_PIPE_INFORMATION.patch)
-	$(call APPLY_FILE,kernel32-Named_Pipe/0006-kernel32-tests-Always-allow-only-one-specific-test-r.patch)
-	$(call APPLY_FILE,kernel32-Named_Pipe/0007-kernel32-Implement-Get-Set-NamedPipeHandleState.patch)
-	$(call APPLY_FILE,kernel32-Named_Pipe/0008-kernel32-tests-Add-tests-for-partially-received-pipe.patch)
-	$(call APPLY_FILE,kernel32-Named_Pipe/0009-kernel32-tests-Add-additional-tests-for-multithreade.patch)
-	$(call APPLY_FILE,kernel32-Named_Pipe/0010-kernel32-tests-Add-tests-for-PeekNamedPipe-with-part.patch)
-	$(call APPLY_FILE,kernel32-Named_Pipe/0011-kernel32-tests-Add-tests-for-sending-and-receiving-l.patch)
-	$(call APPLY_FILE,kernel32-Named_Pipe/0012-kernel32-tests-Add-tests-for-closing-named-pipes.patch)
-	$(call APPLY_FILE,kernel32-Named_Pipe/0013-server-Show-warning-if-message-mode-is-not-supported.patch)
-	$(call APPLY_FILE,kernel32-Named_Pipe/0014-ntdll-Unify-similar-code-in-NtReadFile-and-FILE_Asyn.patch)
-	$(call APPLY_FILE,kernel32-Named_Pipe/0015-ntdll-Move-logic-to-check-for-broken-pipe-into-a-sep.patch)
-	$(call APPLY_FILE,kernel32-Named_Pipe/0016-ntdll-Unify-similar-code-in-NtWriteFile-and-FILE_Asy.patch)
-	$(call APPLY_FILE,kernel32-Named_Pipe/0017-server-Use-SOCK_SEQPACKET-socket-in-combination-with.patch)
-	$(call APPLY_FILE,kernel32-Named_Pipe/0018-ntdll-Add-handling-for-partially-received-messages-i.patch)
-	$(call APPLY_FILE,kernel32-Named_Pipe/0019-kernel32-tests-Add-more-tests-with-overlapped-IO-and.patch)
-	$(call APPLY_FILE,kernel32-Named_Pipe/0020-ntdll-Fix-some-tests-for-overlapped-partial-reads.patch)
-	$(call APPLY_FILE,kernel32-Named_Pipe/0021-kernel32-tests-Test-sending-peeking-and-receiving-an.patch)
-	$(call APPLY_FILE,kernel32-Named_Pipe/0022-ntdll-Add-support-for-nonblocking-pipes.patch)
-	$(call APPLY_FILE,kernel32-Named_Pipe/0023-kernel32-tests-Add-tests-for-PIPE_NOWAIT-in-message-.patch)
-	$(call APPLY_FILE,kernel32-Named_Pipe/0024-ntdll-Allow-to-set-PIPE_NOWAIT-on-byte-mode-pipes.patch)
-	$(call APPLY_FILE,kernel32-Named_Pipe/0025-kernel32-tests-Add-additional-tests-for-PIPE_NOWAIT-.patch)
+	$(call APPLY_FILE,kernel32-Named_Pipe/0002-ntdll-tests-Add-tests-for-FILE_PIPE_INFORMATION.patch)
+	$(call APPLY_FILE,kernel32-Named_Pipe/0003-kernel32-tests-Always-allow-only-one-specific-test-r.patch)
+	$(call APPLY_FILE,kernel32-Named_Pipe/0004-kernel32-Implement-Get-Set-NamedPipeHandleState.patch)
+	$(call APPLY_FILE,kernel32-Named_Pipe/0005-kernel32-tests-Add-tests-for-partially-received-pipe.patch)
+	$(call APPLY_FILE,kernel32-Named_Pipe/0006-kernel32-tests-Add-additional-tests-for-multithreade.patch)
+	$(call APPLY_FILE,kernel32-Named_Pipe/0007-kernel32-tests-Add-tests-for-PeekNamedPipe-with-part.patch)
+	$(call APPLY_FILE,kernel32-Named_Pipe/0008-kernel32-tests-Add-tests-for-sending-and-receiving-l.patch)
+	$(call APPLY_FILE,kernel32-Named_Pipe/0009-kernel32-tests-Add-tests-for-closing-named-pipes.patch)
+	$(call APPLY_FILE,kernel32-Named_Pipe/0010-server-Show-warning-if-message-mode-is-not-supported.patch)
+	$(call APPLY_FILE,kernel32-Named_Pipe/0011-ntdll-Unify-similar-code-in-NtReadFile-and-FILE_Asyn.patch)
+	$(call APPLY_FILE,kernel32-Named_Pipe/0012-ntdll-Move-logic-to-check-for-broken-pipe-into-a-sep.patch)
+	$(call APPLY_FILE,kernel32-Named_Pipe/0013-ntdll-Unify-similar-code-in-NtWriteFile-and-FILE_Asy.patch)
+	$(call APPLY_FILE,kernel32-Named_Pipe/0014-server-Use-SOCK_SEQPACKET-socket-in-combination-with.patch)
+	$(call APPLY_FILE,kernel32-Named_Pipe/0015-ntdll-Add-handling-for-partially-received-messages-i.patch)
+	$(call APPLY_FILE,kernel32-Named_Pipe/0016-kernel32-tests-Add-more-tests-with-overlapped-IO-and.patch)
+	$(call APPLY_FILE,kernel32-Named_Pipe/0017-ntdll-Fix-some-tests-for-overlapped-partial-reads.patch)
+	$(call APPLY_FILE,kernel32-Named_Pipe/0018-kernel32-tests-Test-sending-peeking-and-receiving-an.patch)
+	$(call APPLY_FILE,kernel32-Named_Pipe/0019-ntdll-Add-support-for-nonblocking-pipes.patch)
+	$(call APPLY_FILE,kernel32-Named_Pipe/0020-kernel32-tests-Add-tests-for-PIPE_NOWAIT-in-message-.patch)
+	$(call APPLY_FILE,kernel32-Named_Pipe/0021-ntdll-Allow-to-set-PIPE_NOWAIT-on-byte-mode-pipes.patch)
+	$(call APPLY_FILE,kernel32-Named_Pipe/0022-kernel32-tests-Add-additional-tests-for-PIPE_NOWAIT-.patch)
 	@( \
 		echo '+    { "kernel32-Named_Pipe", "Dan Kegel", "Fix for ConnectNamedPort return value in overlapped mode." },'; \
 		echo '+    { "kernel32-Named_Pipe", "Sebastian Lackner / Erich E. Hoover / Adam Martinson", "Support for NamedPipe operations via SOCK_SEQPACKET sockets. [rev 7]" },'; \
