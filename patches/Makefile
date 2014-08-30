@@ -12,9 +12,10 @@ PATCHLIST := \
 	Pipelight.ok \
 	atl-IOCS_Property.ok \
 	bcrypt-BCryptGetFipsAlgorithmMode.ok \
+	comctl32-ImageList.ok \
 	comctl32-LoadIconMetric.ok \
+	configure-Absolute_RPATH.ok \
 	dsound-Fast_Mixer.ok \
-	dwmapi-Invalidate_Thumbnail.ok \
 	fonts-Missing_Fonts.ok \
 	iphlpapi-TCP_Table.ok \
 	kernel32-GetFinalPathNameByHandle.ok \
@@ -25,9 +26,13 @@ PATCHLIST := \
 	libs-Unicode_Collation.ok \
 	loader-Cmdline_Diagnostics.ok \
 	msi-MoveFiles.ok \
+	ntdll-DOS_Attributes.ok \
 	ntdll-Dynamic_DST.ok \
 	ntdll-FD_Cache.ok \
 	ntdll-FileDispositionInformation.ok \
+	ntdll-Fix_Alignment.ok \
+	ntdll-Fix_Free.ok \
+	ntdll-Heap_FreeLists.ok \
 	ntdll-Junction_Points.ok \
 	ntdll-Pipe_SpecialCharacters.ok \
 	ntdll-loader_EntryPoint.ok \
@@ -38,9 +43,10 @@ PATCHLIST := \
 	server-CreateProcess_ACLs.ok \
 	server-Inherited_ACLs.ok \
 	server-Misc_ACL.ok \
-	server-Process.ok \
+	server-OpenProcess.ok \
 	server-Stored_ACLs.ok \
 	shell32-Default_Folder_ACLs.ok \
+	shell32-Default_Path.ok \
 	shell32-Icons.ok \
 	shell32-RunDLL_CallEntry16.ok \
 	shell32-SHCreateSessionKey.ok \
@@ -49,10 +55,12 @@ PATCHLIST := \
 	user32-GetTipText.ok \
 	user32-WndProc.ok \
 	wineboot-HKEY_DYN_DATA.ok \
+	winebuild-LinkerVersion.ok \
 	winepulse-PulseAudio_Support.ok \
 	winex11-Limited_Resolutions.ok \
 	winex11-Window_Groups.ok \
 	winex11-XEMBED.ok \
+	wpcap-Dynamic_Linking.ok \
 	ws2_32-Connect_Time.ok \
 	ws2_32-TransmitFile.ok \
 	ws2_32-inet_pton.ok \
@@ -144,7 +152,7 @@ atl-IOCS_Property.ok:
 # |   *	Add semi-stub for BCryptGetFipsAlgorithmMode. [by Michael Müller]
 # |
 # | This patchset fixes the following Wine bugs:
-# |   *	[#32194] Multiple applications need BCryptGetFipsAlgorithmMode
+# |   *	[#32194] Support for BCryptGetFipsAlgorithmMode
 # |
 # | Modified files: 
 # |   *	dlls/bcrypt/bcrypt.spec, dlls/bcrypt/bcrypt_main.c, dlls/bcrypt/tests/bcrypt.c
@@ -155,6 +163,24 @@ bcrypt-BCryptGetFipsAlgorithmMode.ok:
 	@( \
 		echo '+    { "bcrypt-BCryptGetFipsAlgorithmMode", "Michael Müller", "Add semi-stub for BCryptGetFipsAlgorithmMode." },'; \
 	) > bcrypt-BCryptGetFipsAlgorithmMode.ok
+
+# Patchset comctl32-ImageList
+# |
+# | Included patches:
+# |   *	Fix issue that dragimage in ImageList only works for first four elements. [by Sebastian Lackner]
+# |
+# | This patchset fixes the following Wine bugs:
+# |   *	[#36761] Fix issue with invisible dragimages in ImageList
+# |
+# | Modified files: 
+# |   *	dlls/comctl32/imagelist.c
+# |
+.INTERMEDIATE: comctl32-ImageList.ok
+comctl32-ImageList.ok:
+	$(call APPLY_FILE,comctl32-ImageList/0001-comctl32-Fix-issue-that-dragimage-in-ImageList-only-.patch)
+	@( \
+		echo '+    { "comctl32-ImageList", "Sebastian Lackner", "Fix issue that dragimage in ImageList only works for first four elements." },'; \
+	) > comctl32-ImageList.ok
 
 # Patchset comctl32-LoadIconMetric
 # |
@@ -176,6 +202,24 @@ comctl32-LoadIconMetric.ok:
 		echo '+    { "comctl32-LoadIconMetric", "Michael Müller", "Implement LoadIconMetric function." },'; \
 	) > comctl32-LoadIconMetric.ok
 
+# Patchset configure-Absolute_RPATH
+# |
+# | Included patches:
+# |   *	Also add the absolute RPATH when linking against libwine. [by Sebastian Lackner]
+# |
+# | This patchset fixes the following Wine bugs:
+# |   *	[#26256] Support for setcap on wine-preloader
+# |
+# | Modified files: 
+# |   *	configure.ac
+# |
+.INTERMEDIATE: configure-Absolute_RPATH.ok
+configure-Absolute_RPATH.ok:
+	$(call APPLY_FILE,configure-Absolute_RPATH/0001-configure-Also-add-the-absolute-RPATH-when-linking-a.patch)
+	@( \
+		echo '+    { "configure-Absolute_RPATH", "Sebastian Lackner", "Also add the absolute RPATH when linking against libwine." },'; \
+	) > configure-Absolute_RPATH.ok
+
 # Patchset dsound-Fast_Mixer
 # |
 # | Included patches:
@@ -193,24 +237,6 @@ dsound-Fast_Mixer.ok:
 	@( \
 		echo '+    { "dsound-Fast_Mixer", "Alexander E. Patrakov", "Add a linear resampler for use with a large number of dsound mixing buffers." },'; \
 	) > dsound-Fast_Mixer.ok
-
-# Patchset dwmapi-Invalidate_Thumbnail
-# |
-# | Included patches:
-# |   *	Add stub for DwmInvalidateIconicBitmaps. [by Erich E. Hoover]
-# |
-# | This patchset fixes the following Wine bugs:
-# |   *	[#32977] Support for DwmInvalidateIconicBitmaps
-# |
-# | Modified files: 
-# |   *	dlls/dwmapi/dwmapi.spec, dlls/dwmapi/dwmapi_main.c, include/dwmapi.h
-# |
-.INTERMEDIATE: dwmapi-Invalidate_Thumbnail.ok
-dwmapi-Invalidate_Thumbnail.ok:
-	$(call APPLY_FILE,dwmapi-Invalidate_Thumbnail/0001-dwmapi-Add-stub-for-DwmInvalidateIconicBitmaps.patch)
-	@( \
-		echo '+    { "dwmapi-Invalidate_Thumbnail", "Erich E. Hoover", "Add stub for DwmInvalidateIconicBitmaps." },'; \
-	) > dwmapi-Invalidate_Thumbnail.ok
 
 # Patchset fonts-Missing_Fonts
 # |
@@ -315,37 +341,33 @@ kernel32-GetVolumePathName.ok:
 # |
 # | This patchset fixes the following Wine bugs:
 # |   *	[#16550] Fix for ConnectNamedPort return value in overlapped mode
-# |   *	[#17273] Add implementation for SetNamedPipeHandleState
 # |   *	[#17195] Support for message mode named pipes
 # |
 # | Modified files: 
-# |   *	dlls/kernel32/file.c, dlls/kernel32/sync.c, dlls/kernel32/tests/pipe.c, dlls/ntdll/file.c, dlls/ntdll/tests/pipe.c,
-# | 	server/named_pipe.c, server/protocol.def, server/sock.c, server/sock.h
+# |   *	dlls/kernel32/file.c, dlls/kernel32/sync.c, dlls/kernel32/tests/pipe.c, dlls/ntdll/file.c, server/named_pipe.c,
+# | 	server/protocol.def, server/sock.c, server/sock.h
 # |
 .INTERMEDIATE: kernel32-Named_Pipe.ok
-kernel32-Named_Pipe.ok: server-Address_Change_Notification.ok ws2_32-Connect_Time.ok ws2_32-TransmitFile.ok
+kernel32-Named_Pipe.ok: ws2_32-TransmitFile.ok
 	$(call APPLY_FILE,kernel32-Named_Pipe/0001-kernel32-ConnectNamedPort-should-return-FALSE-and-se.patch)
-	$(call APPLY_FILE,kernel32-Named_Pipe/0002-ntdll-tests-Add-tests-for-FILE_PIPE_INFORMATION.patch)
-	$(call APPLY_FILE,kernel32-Named_Pipe/0003-kernel32-tests-Always-allow-only-one-specific-test-r.patch)
-	$(call APPLY_FILE,kernel32-Named_Pipe/0004-kernel32-Implement-Get-Set-NamedPipeHandleState.patch)
-	$(call APPLY_FILE,kernel32-Named_Pipe/0005-kernel32-tests-Add-tests-for-partially-received-pipe.patch)
-	$(call APPLY_FILE,kernel32-Named_Pipe/0006-kernel32-tests-Add-additional-tests-for-multithreade.patch)
-	$(call APPLY_FILE,kernel32-Named_Pipe/0007-kernel32-tests-Add-tests-for-PeekNamedPipe-with-part.patch)
-	$(call APPLY_FILE,kernel32-Named_Pipe/0008-kernel32-tests-Add-tests-for-sending-and-receiving-l.patch)
-	$(call APPLY_FILE,kernel32-Named_Pipe/0009-kernel32-tests-Add-tests-for-closing-named-pipes.patch)
-	$(call APPLY_FILE,kernel32-Named_Pipe/0010-server-Show-warning-if-message-mode-is-not-supported.patch)
-	$(call APPLY_FILE,kernel32-Named_Pipe/0011-ntdll-Unify-similar-code-in-NtReadFile-and-FILE_Asyn.patch)
-	$(call APPLY_FILE,kernel32-Named_Pipe/0012-ntdll-Move-logic-to-check-for-broken-pipe-into-a-sep.patch)
-	$(call APPLY_FILE,kernel32-Named_Pipe/0013-ntdll-Unify-similar-code-in-NtWriteFile-and-FILE_Asy.patch)
-	$(call APPLY_FILE,kernel32-Named_Pipe/0014-server-Use-SOCK_SEQPACKET-socket-in-combination-with.patch)
-	$(call APPLY_FILE,kernel32-Named_Pipe/0015-ntdll-Add-handling-for-partially-received-messages-i.patch)
-	$(call APPLY_FILE,kernel32-Named_Pipe/0016-kernel32-tests-Add-more-tests-with-overlapped-IO-and.patch)
-	$(call APPLY_FILE,kernel32-Named_Pipe/0017-ntdll-Fix-some-tests-for-overlapped-partial-reads.patch)
-	$(call APPLY_FILE,kernel32-Named_Pipe/0018-kernel32-tests-Test-sending-peeking-and-receiving-an.patch)
-	$(call APPLY_FILE,kernel32-Named_Pipe/0019-ntdll-Add-support-for-nonblocking-pipes.patch)
-	$(call APPLY_FILE,kernel32-Named_Pipe/0020-kernel32-tests-Add-tests-for-PIPE_NOWAIT-in-message-.patch)
-	$(call APPLY_FILE,kernel32-Named_Pipe/0021-ntdll-Allow-to-set-PIPE_NOWAIT-on-byte-mode-pipes.patch)
-	$(call APPLY_FILE,kernel32-Named_Pipe/0022-kernel32-tests-Add-additional-tests-for-PIPE_NOWAIT-.patch)
+	$(call APPLY_FILE,kernel32-Named_Pipe/0002-kernel32-tests-Add-tests-for-partially-received-pipe.patch)
+	$(call APPLY_FILE,kernel32-Named_Pipe/0003-kernel32-tests-Add-additional-tests-for-multithreade.patch)
+	$(call APPLY_FILE,kernel32-Named_Pipe/0004-kernel32-tests-Add-tests-for-PeekNamedPipe-with-part.patch)
+	$(call APPLY_FILE,kernel32-Named_Pipe/0005-kernel32-tests-Add-tests-for-sending-and-receiving-l.patch)
+	$(call APPLY_FILE,kernel32-Named_Pipe/0006-kernel32-tests-Add-tests-for-closing-named-pipes.patch)
+	$(call APPLY_FILE,kernel32-Named_Pipe/0007-server-Show-warning-if-message-mode-is-not-supported.patch)
+	$(call APPLY_FILE,kernel32-Named_Pipe/0008-ntdll-Unify-similar-code-in-NtReadFile-and-FILE_Asyn.patch)
+	$(call APPLY_FILE,kernel32-Named_Pipe/0009-ntdll-Move-logic-to-check-for-broken-pipe-into-a-sep.patch)
+	$(call APPLY_FILE,kernel32-Named_Pipe/0010-ntdll-Unify-similar-code-in-NtWriteFile-and-FILE_Asy.patch)
+	$(call APPLY_FILE,kernel32-Named_Pipe/0011-server-Use-SOCK_SEQPACKET-socket-in-combination-with.patch)
+	$(call APPLY_FILE,kernel32-Named_Pipe/0012-ntdll-Add-handling-for-partially-received-messages-i.patch)
+	$(call APPLY_FILE,kernel32-Named_Pipe/0013-kernel32-tests-Add-more-tests-with-overlapped-IO-and.patch)
+	$(call APPLY_FILE,kernel32-Named_Pipe/0014-ntdll-Fix-some-tests-for-overlapped-partial-reads.patch)
+	$(call APPLY_FILE,kernel32-Named_Pipe/0015-kernel32-tests-Test-sending-peeking-and-receiving-an.patch)
+	$(call APPLY_FILE,kernel32-Named_Pipe/0016-ntdll-Add-support-for-nonblocking-pipes.patch)
+	$(call APPLY_FILE,kernel32-Named_Pipe/0017-kernel32-tests-Add-tests-for-PIPE_NOWAIT-in-message-.patch)
+	$(call APPLY_FILE,kernel32-Named_Pipe/0018-ntdll-Allow-to-set-PIPE_NOWAIT-on-byte-mode-pipes.patch)
+	$(call APPLY_FILE,kernel32-Named_Pipe/0019-kernel32-tests-Add-additional-tests-for-PIPE_NOWAIT-.patch)
 	@( \
 		echo '+    { "kernel32-Named_Pipe", "Dan Kegel", "Fix for ConnectNamedPort return value in overlapped mode." },'; \
 		echo '+    { "kernel32-Named_Pipe", "Sebastian Lackner / Erich E. Hoover / Adam Martinson", "Support for NamedPipe operations via SOCK_SEQPACKET sockets. [rev 7]" },'; \
@@ -424,6 +446,30 @@ msi-MoveFiles.ok:
 		echo '+    { "msi-MoveFiles", "Sebastian Lackner", "Fix ITERATE_MoveFiles when no source- and destname is specified." },'; \
 	) > msi-MoveFiles.ok
 
+# Patchset ntdll-DOS_Attributes
+# |
+# | Included patches:
+# |   *	Implement DOS hidden/system file attributes [by Erich E. Hoover]
+# |
+# | This patchset fixes the following Wine bugs:
+# |   *	[#9158] Support for DOS hidden/system file attributes
+# |
+# | Modified files: 
+# |   *	configure.ac, dlls/ntdll/directory.c, dlls/ntdll/file.c, dlls/ntdll/ntdll_misc.h, dlls/ntdll/tests/directory.c,
+# | 	dlls/ntdll/tests/file.c, include/wine/port.h, libs/port/Makefile.in, libs/port/xattr.c
+# |
+.INTERMEDIATE: ntdll-DOS_Attributes.ok
+ntdll-DOS_Attributes.ok: ntdll-Fix_Free.ok
+	$(call APPLY_FILE,ntdll-DOS_Attributes/0001-ntdll-Unify-retrieving-the-attributes-of-a-file.patch)
+	$(call APPLY_FILE,ntdll-DOS_Attributes/0002-ntdll-Implement-retrieving-DOS-attributes-in-NtQuery.patch)
+	$(call APPLY_FILE,ntdll-DOS_Attributes/0003-ntdll-Implement-retrieving-DOS-attributes-in-NtQuery.patch)
+	$(call APPLY_FILE,ntdll-DOS_Attributes/0004-ntdll-Implement-storing-DOS-attributes-in-NtSetInfor.patch)
+	$(call APPLY_FILE,ntdll-DOS_Attributes/0005-ntdll-Implement-storing-DOS-attributes-in-NtCreateFi.patch)
+	$(call APPLY_FILE,ntdll-DOS_Attributes/0006-ntdll-Perform-the-Unix-style-hidden-file-check-withi.patch)
+	@( \
+		echo '+    { "ntdll-DOS_Attributes", "Erich E. Hoover", "Implement DOS hidden/system file attributes" },'; \
+	) > ntdll-DOS_Attributes.ok
+
 # Patchset ntdll-Dynamic_DST
 # |
 # | Included patches:
@@ -480,6 +526,64 @@ ntdll-FileDispositionInformation.ok:
 		echo '+    { "ntdll-FileDispositionInformation", "Dmitry Timoshkov / Erich E. Hoover", "Add support for setting file disposition information." },'; \
 	) > ntdll-FileDispositionInformation.ok
 
+# Patchset ntdll-Fix_Alignment
+# |
+# | Included patches:
+# |   *	Move NtProtectVirtualMemory and NtCreateSection to separate pages in ntdll on x86. [by Michael Müller]
+# |
+# | This patchset fixes the following Wine bugs:
+# |   *	[#33162] Ensure NtProtectVirtualMemory and NtCreateSection are on separate pages
+# |
+# | Modified files: 
+# |   *	dlls/ntdll/virtual.c
+# |
+.INTERMEDIATE: ntdll-Fix_Alignment.ok
+ntdll-Fix_Alignment.ok:
+	$(call APPLY_FILE,ntdll-Fix_Alignment/0001-ntdll-Move-NtProtectVirtualMemory-and-NtCreateSectio.patch)
+	@( \
+		echo '+    { "ntdll-Fix_Alignment", "Michael Müller", "Move NtProtectVirtualMemory and NtCreateSection to separate pages in ntdll on x86." },'; \
+	) > ntdll-Fix_Alignment.ok
+
+# Patchset ntdll-Fix_Free
+# |
+# | Included patches:
+# |   *	Fix unintentional leaks with ntdll internals [rev 2, by Erich E. Hoover]
+# |
+# | Modified files: 
+# |   *	dlls/kernel32/path.c, dlls/kernel32/volume.c, dlls/ntdll/directory.c, dlls/ntdll/file.c, dlls/ntdll/loader.c
+# |
+.INTERMEDIATE: ntdll-Fix_Free.ok
+ntdll-Fix_Free.ok:
+	$(call APPLY_FILE,ntdll-Fix_Free/0001-ntdll-Make-nt_to_unix_file_name_attr-return-always-s.patch)
+	$(call APPLY_FILE,ntdll-Fix_Free/0002-ntdll-Make-wine_nt_to_unix_file_name-return-always-s.patch)
+	$(call APPLY_FILE,ntdll-Fix_Free/0003-ntdll-Make-file_id_to_unix_file_name-return-always-s.patch)
+	$(call APPLY_FILE,ntdll-Fix_Free/0004-ntdll-Fix-leak-on-STATUS_NO_SUCH_FILE-in-NtQueryFull.patch)
+	$(call APPLY_FILE,ntdll-Fix_Free/0005-ntdll-Fix-leak-on-STATUS_NO_SUCH_FILE-in-NtQueryAttr.patch)
+	$(call APPLY_FILE,ntdll-Fix_Free/0006-ntdll-Fix-unlikely-leak-on-STATUS_NO_SUCH_FILE-in-in.patch)
+	$(call APPLY_FILE,ntdll-Fix_Free/0007-ntdll-Fix-leak-on-STATUS_NO_SUCH_FILE-in-load_builti.patch)
+	$(call APPLY_FILE,ntdll-Fix_Free/0008-ntdll-Fix-leak-on-STATUS_NO_SUCH_FILE-for-certain-di.patch)
+	$(call APPLY_FILE,ntdll-Fix_Free/0009-kernel32-Fix-leak-on-STATUS_NO_SUCH_FILE-in-RemoveDi.patch)
+	$(call APPLY_FILE,ntdll-Fix_Free/0010-kernel32-Fix-leak-on-STATUS_NO_SUCH_FILE-in-QueryDos.patch)
+	$(call APPLY_FILE,ntdll-Fix_Free/0011-kernel32-Fix-leaking-directory-handle-in-RemoveDirec.patch)
+	@( \
+		echo '+    { "ntdll-Fix_Free", "Erich E. Hoover", "Fix unintentional leaks with ntdll internals [rev 2]" },'; \
+	) > ntdll-Fix_Free.ok
+
+# Patchset ntdll-Heap_FreeLists
+# |
+# | Included patches:
+# |   *	Improve heap allocation performance by using more fine-grained free lists. [by Steaphan Greene]
+# |
+# | Modified files: 
+# |   *	dlls/ntdll/heap.c
+# |
+.INTERMEDIATE: ntdll-Heap_FreeLists.ok
+ntdll-Heap_FreeLists.ok:
+	$(call APPLY_FILE,ntdll-Heap_FreeLists/0001-ntdll-Improve-heap-allocation-performance-by-using-m.patch)
+	@( \
+		echo '+    { "ntdll-Heap_FreeLists", "Steaphan Greene", "Improve heap allocation performance by using more fine-grained free lists." },'; \
+	) > ntdll-Heap_FreeLists.ok
+
 # Patchset ntdll-Junction_Points
 # |
 # | Included patches:
@@ -492,11 +596,11 @@ ntdll-FileDispositionInformation.ok:
 # |   *	dlls/kernel32/path.c, dlls/kernel32/volume.c, dlls/ntdll/file.c, dlls/ntdll/tests/file.c, include/ntifs.h
 # |
 .INTERMEDIATE: ntdll-Junction_Points.ok
-ntdll-Junction_Points.ok:
+ntdll-Junction_Points.ok: ntdll-Fix_Free.ok
 	$(call APPLY_FILE,ntdll-Junction_Points/0001-ntdll-Add-support-for-junction-point-creation.patch)
 	$(call APPLY_FILE,ntdll-Junction_Points/0002-ntdll-Add-support-for-reading-junction-points.patch)
 	$(call APPLY_FILE,ntdll-Junction_Points/0003-ntdll-Add-support-for-deleting-junction-points.patch)
-	$(call APPLY_FILE,ntdll-Junction_Points/0004-ntdll-Advertise-that-a-file-is-a-junction-point.patch)
+	$(call APPLY_FILE,ntdll-Junction_Points/0004-ntdll-Add-a-test-for-junction-point-advertisement.patch)
 	$(call APPLY_FILE,ntdll-Junction_Points/0005-kernel32-ntdll-Add-support-for-deleting-junction-poi.patch)
 	$(call APPLY_FILE,ntdll-Junction_Points/0006-kernel32-Advertise-junction-point-support.patch)
 	$(call APPLY_FILE,ntdll-Junction_Points/0007-ntdll-tests-Add-test-for-deleting-junction-point-tar.patch)
@@ -565,16 +669,17 @@ quartz-MediaSeeking_Positions.ok:
 # |
 # | Included patches:
 # |   *	Implement Stubs for ITextRange interface. [rev 3, by Jactry Zeng]
-# |   *	Implement IText{Range,Selection}::{GetChar,GetStart,GetEnd,GetDuplicate,Collapse,SetStart,SetEnd}. [by Jactry Zeng]
 # |   *	Implement Stubs for ITextFont interface. [rev 2, by Jactry Zeng]
 # |   *	Implement Stubs for ITextPara interface. [rev 2, by Jactry Zeng]
+# |   *	Implement ITextRange/Selection::{GetChar,GetStart,GetEnd,GetDuplicate,Collapse,SetStart,SetEnd}. [by Jactry Zeng]
+# |   *	Implement ITextRange/Selection::{GetText,SetRange,IsEqual,GetStoryLength}. [by Jactry Zeng]
 # |
 # | This patchset fixes the following Wine bugs:
 # |   *	[#12458] Support for ITextDocument_fnRange function
 # |   *	[#18303] Support for ITextRange, ITextFont and ITextPara
 # |
 # | Modified files: 
-# |   *	dlls/riched20/richole.c, dlls/riched20/tests/richole.c
+# |   *	dlls/riched20/richole.c, dlls/riched20/run.c, dlls/riched20/tests/richole.c
 # |
 .INTERMEDIATE: riched20-IText_Interface.ok
 riched20-IText_Interface.ok:
@@ -586,11 +691,18 @@ riched20-IText_Interface.ok:
 	$(call APPLY_FILE,riched20-IText_Interface/0006-riched20-Implement-IText-Selection-Range-Set-Start-E.patch)
 	$(call APPLY_FILE,riched20-IText_Interface/0007-riched20-Stub-for-ITextFont-interface-and-implement-.patch)
 	$(call APPLY_FILE,riched20-IText_Interface/0008-riched20-Stub-for-ITextPara-interface-and-implement-.patch)
+	$(call APPLY_FILE,riched20-IText_Interface/0009-riched20-Fix-ME_RunOfsFromCharOfs-when-nCharOfs-strl.patch)
+	$(call APPLY_FILE,riched20-IText_Interface/0010-riched20-Implement-ITextRange-GetText.patch)
+	$(call APPLY_FILE,riched20-IText_Interface/0011-riched20-Implement-ITextRange-SetRange.patch)
+	$(call APPLY_FILE,riched20-IText_Interface/0012-riched20-Implement-ITextRange-IsEqual.patch)
+	$(call APPLY_FILE,riched20-IText_Interface/0013-riched20-Implement-ITextRange-GetStoryLength.patch)
+	$(call APPLY_FILE,riched20-IText_Interface/0014-riched20-Implement-ITextSelection-GetStoryLength.patch)
 	@( \
 		echo '+    { "riched20-IText_Interface", "Jactry Zeng", "Implement Stubs for ITextRange interface. [rev 3]" },'; \
-		echo '+    { "riched20-IText_Interface", "Jactry Zeng", "Implement IText{Range,Selection}::{GetChar,GetStart,GetEnd,GetDuplicate,Collapse,SetStart,SetEnd}." },'; \
 		echo '+    { "riched20-IText_Interface", "Jactry Zeng", "Implement Stubs for ITextFont interface. [rev 2]" },'; \
 		echo '+    { "riched20-IText_Interface", "Jactry Zeng", "Implement Stubs for ITextPara interface. [rev 2]" },'; \
+		echo '+    { "riched20-IText_Interface", "Jactry Zeng", "Implement ITextRange/Selection::{GetChar,GetStart,GetEnd,GetDuplicate,Collapse,SetStart,SetEnd}." },'; \
+		echo '+    { "riched20-IText_Interface", "Jactry Zeng", "Implement ITextRange/Selection::{GetText,SetRange,IsEqual,GetStoryLength}." },'; \
 	) > riched20-IText_Interface.ok
 
 # Patchset server-ACL_Compat
@@ -603,7 +715,7 @@ riched20-IText_Interface.ok:
 # |
 .INTERMEDIATE: server-ACL_Compat.ok
 server-ACL_Compat.ok: server-Inherited_ACLs.ok
-	$(call APPLY_FILE,server-ACL_Compat/0010-server-Add-compatibility-code-for-handling-the-old-m.patch)
+	$(call APPLY_FILE,server-ACL_Compat/0001-server-Add-compatibility-code-for-handling-the-old-m.patch)
 	@( \
 		echo '+    { "server-ACL_Compat", "Erich E. Hoover", "Compatibility patch for old method of storing extended file system attributes. [rev 6]" },'; \
 	) > server-ACL_Compat.ok
@@ -617,7 +729,7 @@ server-ACL_Compat.ok: server-Inherited_ACLs.ok
 # |   *	[#32328] Support for interface change notifications
 # |
 # | Modified files: 
-# |   *	dlls/ws2_32/tests/sock.c, server/event.c, server/named_pipe.c, server/object.h, server/sock.c
+# |   *	Makefile.in, dlls/ws2_32/tests/sock.c, server/event.c, server/named_pipe.c, server/object.h, server/sock.c
 # |
 .INTERMEDIATE: server-Address_Change_Notification.ok
 server-Address_Change_Notification.ok:
@@ -633,7 +745,7 @@ server-Address_Change_Notification.ok:
 # Patchset server-CreateProcess_ACLs
 # |
 # | Included patches:
-# |   *	Implement passing ACLs to CreateProcess. [by Joris van der Wel]
+# |   *	Implement passing ACLs to CreateProcess. [rev 2, by Joris van der Wel / Sebastian Lackner]
 # |
 # | This patchset fixes the following Wine bugs:
 # |   *	[#22006] Support for process ACLs
@@ -645,11 +757,11 @@ server-Address_Change_Notification.ok:
 .INTERMEDIATE: server-CreateProcess_ACLs.ok
 server-CreateProcess_ACLs.ok:
 	$(call APPLY_FILE,server-CreateProcess_ACLs/0001-server-A-new-function-set_sd_defaults_from_token-tha.patch)
-	$(call APPLY_FILE,server-CreateProcess_ACLs/0002-server-Support-sending-process-and-thread-security-d.patch)
-	$(call APPLY_FILE,server-CreateProcess_ACLs/0003-server-implement-passing-a-process-security-descript.patch)
-	$(call APPLY_FILE,server-CreateProcess_ACLs/0004-server-implement-passing-a-thread-security-descripto.patch)
+	$(call APPLY_FILE,server-CreateProcess_ACLs/0002-server-Support-sending-thread-and-process-security-d.patch)
+	$(call APPLY_FILE,server-CreateProcess_ACLs/0003-kernel32-Implement-passing-a-process-security-descri.patch)
+	$(call APPLY_FILE,server-CreateProcess_ACLs/0004-advapi32-tests-Add-additional-tests-for-passing-a-th.patch)
 	@( \
-		echo '+    { "server-CreateProcess_ACLs", "Joris van der Wel", "Implement passing ACLs to CreateProcess." },'; \
+		echo '+    { "server-CreateProcess_ACLs", "Joris van der Wel / Sebastian Lackner", "Implement passing ACLs to CreateProcess. [rev 2]" },'; \
 	) > server-CreateProcess_ACLs.ok
 
 # Patchset server-Inherited_ACLs
@@ -690,37 +802,37 @@ server-Misc_ACL.ok:
 		echo '+    { "server-Misc_ACL", "Erich E. Hoover", "Add default security descriptor ownership and DACLs for processes." },'; \
 	) > server-Misc_ACL.ok
 
-# Patchset server-Process
+# Patchset server-OpenProcess
 # |
 # | Included patches:
-# |   *	Return error when opening a terminating process. [by Michael Müller]
+# |   *	Return error when opening a terminating process. [rev 3, by Michael Müller]
 # |
 # | This patchset fixes the following Wine bugs:
-# |   *	[#37087] Gothic 2 demo expects an error when opening a terminating process
+# |   *	[#37087] Return an error when trying to open a terminated process
 # |
 # | Modified files: 
-# |   *	server/process.c
+# |   *	server/process.c, server/process.h
 # |
-.INTERMEDIATE: server-Process.ok
-server-Process.ok:
-	$(call APPLY_FILE,server-Process/0001-server-Return-error-when-opening-a-terminating-proce.patch)
+.INTERMEDIATE: server-OpenProcess.ok
+server-OpenProcess.ok:
+	$(call APPLY_FILE,server-OpenProcess/0001-server-Return-error-when-opening-a-terminating-proce.patch)
 	@( \
-		echo '+    { "server-Process", "Michael Müller", "Return error when opening a terminating process." },'; \
-	) > server-Process.ok
+		echo '+    { "server-OpenProcess", "Michael Müller", "Return error when opening a terminating process. [rev 3]" },'; \
+	) > server-OpenProcess.ok
 
 # Patchset server-Stored_ACLs
 # |
 # | Included patches:
-# |   *	Store and return security attributes with extended file attributes. [rev 6, by Erich E. Hoover]
+# |   *	Store and return security attributes with extended file attributes. [rev 7, by Erich E. Hoover]
 # |
 # | This patchset fixes the following Wine bugs:
 # |   *	[#31858] Support for stored file ACLs
 # |
 # | Modified files: 
-# |   *	configure.ac, dlls/advapi32/tests/security.c, server/change.c, server/file.c, server/file.h
+# |   *	dlls/advapi32/tests/security.c, include/wine/port.h, server/change.c, server/file.c, server/file.h
 # |
 .INTERMEDIATE: server-Stored_ACLs.ok
-server-Stored_ACLs.ok:
+server-Stored_ACLs.ok: ntdll-DOS_Attributes.ok
 	$(call APPLY_FILE,server-Stored_ACLs/0001-server-Unify-the-storage-of-security-attributes-for-.patch)
 	$(call APPLY_FILE,server-Stored_ACLs/0002-server-Unify-the-retrieval-of-security-attributes-fo.patch)
 	$(call APPLY_FILE,server-Stored_ACLs/0003-server-Store-file-security-attributes-with-extended-.patch)
@@ -728,7 +840,7 @@ server-Stored_ACLs.ok:
 	$(call APPLY_FILE,server-Stored_ACLs/0005-server-Retrieve-file-security-attributes-with-extend.patch)
 	$(call APPLY_FILE,server-Stored_ACLs/0006-server-Convert-return-of-file-security-masks-with-ge.patch)
 	@( \
-		echo '+    { "server-Stored_ACLs", "Erich E. Hoover", "Store and return security attributes with extended file attributes. [rev 6]" },'; \
+		echo '+    { "server-Stored_ACLs", "Erich E. Hoover", "Store and return security attributes with extended file attributes. [rev 7]" },'; \
 	) > server-Stored_ACLs.ok
 
 # Patchset shell32-Default_Folder_ACLs
@@ -745,6 +857,24 @@ shell32-Default_Folder_ACLs.ok:
 	@( \
 		echo '+    { "shell32-Default_Folder_ACLs", "Erich E. Hoover", "Generate default ACLs for user shell folders. [rev 6]" },'; \
 	) > shell32-Default_Folder_ACLs.ok
+
+# Patchset shell32-Default_Path
+# |
+# | Included patches:
+# |   *	Implement KF_FLAG_DEFAULT_PATH flag for SHGetKnownFolderPath. [by Sebastian Lackner]
+# |
+# | This patchset fixes the following Wine bugs:
+# |   *	[#30385] Support for KF_FLAG_DEFAULT_PATH in SHGetKnownFolderPath
+# |
+# | Modified files: 
+# |   *	dlls/shell32/shellpath.c, dlls/shell32/tests/shellpath.c
+# |
+.INTERMEDIATE: shell32-Default_Path.ok
+shell32-Default_Path.ok:
+	$(call APPLY_FILE,shell32-Default_Path/0001-shell32-Implement-KF_FLAG_DEFAULT_PATH-flag-for-SHGe.patch)
+	@( \
+		echo '+    { "shell32-Default_Path", "Sebastian Lackner", "Implement KF_FLAG_DEFAULT_PATH flag for SHGetKnownFolderPath." },'; \
+	) > shell32-Default_Path.ok
 
 # Patchset shell32-Icons
 # |
@@ -889,6 +1019,24 @@ wineboot-HKEY_DYN_DATA.ok:
 		echo '+    { "wineboot-HKEY_DYN_DATA", "Michael Müller", "Add some generic hardware in HKEY_DYN_DATA\\\\Config Manager\\\\Enum." },'; \
 	) > wineboot-HKEY_DYN_DATA.ok
 
+# Patchset winebuild-LinkerVersion
+# |
+# | Included patches:
+# |   *	Set a valid major and minor linker version in the PE header. [by Michael Müller]
+# |
+# | This patchset fixes the following Wine bugs:
+# |   *	[#28768] Games For Windows Live 1.x expects a valid linker version in the PE header
+# |
+# | Modified files: 
+# |   *	tools/winebuild/spec32.c
+# |
+.INTERMEDIATE: winebuild-LinkerVersion.ok
+winebuild-LinkerVersion.ok:
+	$(call APPLY_FILE,winebuild-LinkerVersion/0001-winebuild-Set-a-valid-major-and-minor-linker-version.patch)
+	@( \
+		echo '+    { "winebuild-LinkerVersion", "Michael Müller", "Set a valid major and minor linker version in the PE header." },'; \
+	) > winebuild-LinkerVersion.ok
+
 # Patchset winepulse-PulseAudio_Support
 # |
 # | Included patches:
@@ -973,19 +1121,31 @@ winex11-Window_Groups.ok:
 # |
 # | Included patches:
 # |   *	Enable/disable windows when they are (un)mapped by foreign applications. [by Sebastian Lackner]
-# |   *	Update gl_drawable for embedded windows. [by Sebastian Lackner]
 # |
 # | Modified files: 
-# |   *	dlls/winex11.drv/event.c, dlls/winex11.drv/window.c
+# |   *	dlls/winex11.drv/event.c
 # |
 .INTERMEDIATE: winex11-XEMBED.ok
 winex11-XEMBED.ok:
-	$(call APPLY_FILE,winex11-XEMBED/0001-winex11-Update-gl_drawable-for-embedded-windows.patch)
-	$(call APPLY_FILE,winex11-XEMBED/0002-winex11-Enable-disable-windows-when-they-are-un-mapped.patch)
+	$(call APPLY_FILE,winex11-XEMBED/0001-winex11-Enable-disable-windows-when-they-are-un-mapped.patch)
 	@( \
 		echo '+    { "winex11-XEMBED", "Sebastian Lackner", "Enable/disable windows when they are (un)mapped by foreign applications." },'; \
-		echo '+    { "winex11-XEMBED", "Sebastian Lackner", "Update gl_drawable for embedded windows." },'; \
 	) > winex11-XEMBED.ok
+
+# Patchset wpcap-Dynamic_Linking
+# |
+# | Included patches:
+# |   *	Use dynamic linking for libpcap. [by André Hentschel]
+# |
+# | Modified files: 
+# |   *	configure.ac, dlls/wpcap/Makefile.in, dlls/wpcap/wpcap.c
+# |
+.INTERMEDIATE: wpcap-Dynamic_Linking.ok
+wpcap-Dynamic_Linking.ok:
+	$(call APPLY_FILE,wpcap-Dynamic_Linking/0001-wpcap-Load-libpcap-dynamically.patch)
+	@( \
+		echo '+    { "wpcap-Dynamic_Linking", "André Hentschel", "Use dynamic linking for libpcap." },'; \
+	) > wpcap-Dynamic_Linking.ok
 
 # Patchset ws2_32-Connect_Time
 # |

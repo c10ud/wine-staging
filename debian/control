@@ -1,7 +1,7 @@
 Source: wine-compholio
 Section: otherosfs
 Priority: optional
-Maintainer: Erich E. Hoover <ehoover@mines.edu>
+Maintainer: Erich E. Hoover <erich.e.hoover@gmail.com>
 XSBC-Original-Maintainer: Scott Ritchie <scottritchie@ubuntu.com>
 Build-Depends: autotools-dev,
                autoconf,
@@ -86,6 +86,7 @@ Recommends: libcapi20-3,
             libjpeg8,
             libopenal1 (>= 1:1.12),
             libosmesa6,
+            libpcap0.8,
             libpng12-0,
             libpulse0,
             libsane,
@@ -144,6 +145,7 @@ Recommends: libcapi20-3,
             libjpeg8,
             libopenal1 (>= 1:1.12),
             libosmesa6,
+            libpcap0.8,
             libpng12-0,
             libpulse0,
             libsane,

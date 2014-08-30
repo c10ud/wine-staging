@@ -1,4 +1,4 @@
-From 0fea62714c3bdf5384f2f47c1985c21470710cfd Mon Sep 17 00:00:00 2001
+From bea49452dfb1e768b03fc75fced9b733d1edd73f Mon Sep 17 00:00:00 2001
 From: "Erich E. Hoover" <erich.e.hoover@gmail.com>
 Date: Fri, 18 Apr 2014 14:01:35 -0600
 Subject: server: Retrieve file security attributes with extended file
@@ -6,15 +6,14 @@ Subject: server: Retrieve file security attributes with extended file
 
 ---
  dlls/advapi32/tests/security.c |   49 ++++++++++++++++++++--------------------
- server/change.c                |    2 +-
- server/file.c                  |   38 ++++++++++++++++++++++++++++---
- 3 files changed, 60 insertions(+), 29 deletions(-)
+ server/file.c                  |   26 ++++++++++++++++++---
+ 2 files changed, 47 insertions(+), 28 deletions(-)
 
 diff --git a/dlls/advapi32/tests/security.c b/dlls/advapi32/tests/security.c
-index f3ccc8e..4352ba6 100644
+index b44496a..02094a4 100644
 --- a/dlls/advapi32/tests/security.c
 +++ b/dlls/advapi32/tests/security.c
-@@ -3131,24 +3131,24 @@ static void test_CreateDirectoryA(void)
+@@ -3192,24 +3192,24 @@ static void test_CreateDirectoryA(void)
          bret = pGetAce(pDacl, 0, (VOID **)&ace);
          ok(bret, "Failed to get Current User ACE.\n");
          bret = EqualSid(&ace->SidStart, user_sid);
@@ -51,7 +50,7 @@ index f3ccc8e..4352ba6 100644
      }
      LocalFree(pSD);
  
-@@ -3323,23 +3323,22 @@ static void test_GetNamedSecurityInfoA(void)
+@@ -3384,23 +3384,22 @@ static void test_GetNamedSecurityInfoA(void)
          bret = pGetAce(pDacl, 0, (VOID **)&ace);
          ok(bret, "Failed to get Current User ACE.\n");
          bret = EqualSid(&ace->SidStart, user_sid);
@@ -81,7 +80,7 @@ index f3ccc8e..4352ba6 100644
      }
      LocalFree(pSD);
      HeapFree(GetProcessHeap(), 0, user);
-@@ -3989,22 +3988,22 @@ static void test_GetSecurityInfo(void)
+@@ -4050,22 +4049,22 @@ static void test_GetSecurityInfo(void)
          bret = pGetAce(pDacl, 0, (VOID **)&ace);
          ok(bret, "Failed to get Current User ACE.\n");
          bret = EqualSid(&ace->SidStart, user_sid);
@@ -110,78 +109,47 @@ index f3ccc8e..4352ba6 100644
      }
      LocalFree(pSD);
      CloseHandle(obj);
-diff --git a/server/change.c b/server/change.c
-index c673c48..27dbe25 100644
---- a/server/change.c
-+++ b/server/change.c
-@@ -290,7 +290,7 @@ static struct security_descriptor *dir_get_sd( struct object *obj )
-     assert( obj->ops == &dir_ops );
- 
-     fd = dir_get_fd( obj );
--    sd = set_file_sd( obj, fd, &dir->mode, &dir->uid );
-+    sd = get_file_sd( obj, fd, &dir->mode, &dir->uid );
-     release_object( fd );
-     return sd;
- }
 diff --git a/server/file.c b/server/file.c
-index 6981fca..26962df 100644
+index 72d6d95..ff51b73 100644
 --- a/server/file.c
 +++ b/server/file.c
-@@ -504,12 +504,43 @@ struct security_descriptor *mode_to_sd( mode_t mode, const SID *user, const SID
+@@ -499,6 +499,25 @@ struct security_descriptor *mode_to_sd( mode_t mode, const SID *user, const SID
      return sd;
  }
  
 +struct security_descriptor *get_xattr_sd( int fd )
 +{
-+#if defined(HAVE_ATTR_XATTR_H) || defined(HAVE_SYS_EXTATTR_H)
 +    struct security_descriptor *sd;
 +    char buffer[XATTR_SIZE_MAX];
 +    int n;
 +
-+#if defined(HAVE_ATTR_XATTR_H)
-+    n = fgetxattr( fd, "user.wine.sd", buffer, sizeof(buffer) );
-+#else
-+    n = extattr_get_fd( fd, EXTATTR_NAMESPACE_USER, "wine.sd", buffer, sizeof(buffer) );
-+#endif
++    n = xattr_fget( fd, WINE_XATTR_SD, buffer, sizeof(buffer) );
 +    if (n == -1 || n < 2 + sizeof(struct security_descriptor)) return NULL;
 +
 +    /* validate that we can handle the descriptor */
-+    if (buffer[0] != SECURITY_DESCRIPTOR_REVISION || buffer[1] != 0) return NULL;
-+
-+    sd = (struct security_descriptor *)&buffer[2];
-+    if (n  < 2 + sizeof(struct security_descriptor) + sd->owner_len
-+               + sd->group_len + sd->sacl_len + sd->dacl_len)
++    if (buffer[0] != SECURITY_DESCRIPTOR_REVISION || buffer[1] != 0 ||
++            !sd_is_valid( (struct security_descriptor *)&buffer[2], n - 2 ))
 +        return NULL;
 +
 +    sd = mem_alloc( n - 2 );
 +    if (sd) memcpy( sd, &buffer[2], n - 2 );
 +    return sd;
-+#else
-+    return NULL;
-+#endif
 +}
 +
  struct security_descriptor *get_file_sd( struct object *obj, struct fd *fd, mode_t *mode,
                                           uid_t *uid )
  {
-     int unix_fd = get_unix_fd( fd );
-     struct stat st;
-     struct security_descriptor *sd;
-+    const SID *user, *group;
- 
-     if (unix_fd == -1 || fstat( unix_fd, &st ) == -1)
-         return obj->sd;
-@@ -519,9 +550,10 @@ struct security_descriptor *get_file_sd( struct object *obj, struct fd *fd, mode
+@@ -514,9 +533,10 @@ struct security_descriptor *get_file_sd( struct object *obj, struct fd *fd, mode
          (st.st_uid == *uid))
          return obj->sd;
  
 -    sd = mode_to_sd( st.st_mode,
 -                     security_unix_uid_to_sid( st.st_uid ),
 -                     token_get_primary_group( current->process->token ));
-+    user = security_unix_uid_to_sid( st.st_uid );
-+    group = token_get_primary_group( current->process->token );
 +    sd = get_xattr_sd( unix_fd );
-+    if (!sd) sd = mode_to_sd( st.st_mode, user, group);
++    if (!sd) sd = mode_to_sd( st.st_mode,
++                              security_unix_uid_to_sid( st.st_uid ),
++                              token_get_primary_group( current->process->token ));
      if (!sd) return obj->sd;
  
      *mode = st.st_mode;
